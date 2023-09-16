@@ -1,15 +1,20 @@
 # in progress!
-deriv(Y) <- r * Y * (1 - Y / K) - Y * H * N ^ beta + Tr
-deriv(N) <- H / E * Y * N ^ beta - M / E * N ^ alpha + Im
+#deriv(Y) <- r * Y * (1 - Y / K) - Y * H * N ^ beta + Tr
+#deriv(N) <- H / E * Y * N ^ beta - M / E * N ^ alpha + Im
 
-initial(Y) <- 1
-initial(N) <- 1
+deriv(Y) <- Y * (1 - Y) - Y * H * N ^ beta + Tr
+deriv(N) <- H * Y * N ^ beta - M * N ^ alpha + Im
 
-r <- user(0.1)
-K <- user(1)
-M <- user(4e-7)
-H <- user(1e-6)
-E <- user(1e-4)
+initial(Y) <- Y0
+initial(N) <- N0
+
+N0 <- user(1)
+Y0 <- user(1)
+#r <- user(0.1)
+#K <- user(1)
+M <- user(0.32)
+H <- user(0.5)
+#E <- user(1e-4)
 beta <- user(1.1)
 alpha <- user(0.9)
 Tr <- user(0)

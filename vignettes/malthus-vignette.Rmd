@@ -1,0 +1,103 @@
+---
+title: "Getting started with malthus"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Getting started with malthus}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r, include = FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment = "#>"
+)
+```
+
+```{r setup}
+library(malthus)
+library(ggplot2)
+```
+
+```{r}
+run_sim(nefedov, 1000) |>
+  ggplot(aes(time, value)) +
+  geom_line(linewidth = 1.2) +
+  facet_wrap(~var, scales = 'free_y', nrow = 2) +
+  theme_bw()
+```
+```{r}
+run_sim(nefedov, 1000, tidy = FALSE) |>
+  ggplot(aes(N, K)) +
+  geom_path(aes(color = time)) +
+    geom_point(aes(color = time)) +
+  scale_color_viridis_c() +
+  theme_bw()
+```
+
+```{r}
+run_sim(scaling_cities, 100) |>
+  ggplot(aes(time, value)) +
+  geom_line(linewidth = 1.2) +
+  facet_wrap(~var, nrow = 2) +
+  theme_bw()
+```
+
+```{r}
+run_sim(elite_extraction, 1000) |>
+  ggplot(aes(time, value)) +
+  geom_line(linewidth = 1.2) +
+  facet_wrap(~var, scales = 'free_y', nrow = 2) +
+  theme_bw()
+```
+```{r, fig.asp = 1}
+run_sim(fiscal_demographic, 500, N0 = 0.5, S0 = 0) |>
+  ggplot(aes(time, value)) +
+  geom_line(linewidth = 1.2) +
+  facet_wrap(~var, scales = 'free_y', nrow = 2) +
+  theme_bw()
+```
+
+```{r}
+run_sim(fiscal_demographic_class, 750, S0 = 1) |>
+  ggplot(aes(time, value)) +
+  geom_line(linewidth = 1.2) +
+  facet_wrap(~var, scales = 'free_y', nrow = 2) +
+  theme_bw()
+```
+
+```{r}
+run_sim(fiscal_demographic_war, 1000, N0 = 1, W0 = 0.5, c = .1, delta = 0.05) |>
+  dplyr::filter(time > 500) |>
+  ggplot(aes(time, value)) +
+  geom_line(linewidth = 1.2) +
+  facet_wrap(~var, scales = 'free_y', nrow = 2) +
+  theme_bw()
+```
+```{r}
+run_sim(fiscal_demographic_war, 500, tidy = FALSE) |>
+  ggplot(aes(N, S)) +
+  geom_path(aes(color = time)) +
+    geom_point(aes(color = time)) +
+  scale_color_viridis_c() +
+  theme_bw()
+```
+
+```{r}
+run_sim(stateless_war, 200) |>
+  ggplot(aes(time, value)) +
+  geom_line(linewidth = 1.2) +
+  facet_wrap(~var, scales = 'free_y', nrow = 2) +
+  theme_bw()
+```
+
+
+
+```{r}
+run_sim(fiscal_demographic, 500, tidy = FALSE) |>
+  ggplot(aes(N, S)) +
+  geom_path(aes(color = time)) +
+    geom_point(aes(color = time)) +
+  scale_color_viridis_c() +
+  theme_bw()
+```
