@@ -20,12 +20,24 @@ library(ggplot2)
 ```
 
 ```{r}
+run_sim(brander_taylor, 1440) |>
+  ggplot(aes(time, value, group = var, linetype = var)) +
+  geom_line(linewidth = 1.2) +
+ # facet_wrap(~var, scales = 'free_y', nrow = 2) +
+  theme_bw()
+```
+
+
+```{r}
 run_sim(nefedov, 1000) |>
   ggplot(aes(time, value)) +
   geom_line(linewidth = 1.2) +
   facet_wrap(~var, scales = 'free_y', nrow = 2) +
   theme_bw()
 ```
+
+
+
 ```{r}
 run_sim(nefedov, 1000, tidy = FALSE) |>
   ggplot(aes(N, K)) +
