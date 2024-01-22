@@ -8,4 +8,7 @@
 ##' @export elite_extraction
 ##' @export stateless_war
 ##' @export scaling_cities
+##' @export brander_taylor
+##' @export janssen
+##' @export janssen_stochastic
 NULL

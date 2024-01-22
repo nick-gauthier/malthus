@@ -1,0 +1,511 @@
+---
+title: "Population dynamics"
+format: html
+editor: visual
+---
+
+```{r}
+library(odin)
+library(tidyverse)
+```
+
+Deterministic logistic
+
+```{r}
+# install.packages("drat") # -- if you don't have drat installed
+drat:::add("mrc-ide")
+install.packages("odin")
+```
+
+```{r}
+logistic_ode <- odin::odin({
+  deriv(N) <- r * N * (1 - N / K)
+
+  initial(N) <- N0
+
+  N0 <- user(10)
+  K <- user(150)
+  r <- user(0.01)
+
+}, verbose = FALSE)
+```
+
+```{r}
+#| echo: FALSE
+log_ode_model <- logistic_ode$new()
+
+result_ode <- log_ode_model$run(1:1000) |>
+  as_tibble()
+# Plotting both deterministic and stochastic
+
+ggplot() +
+  geom_line(data = result_ode, aes(x = t, y = N, color = "Deterministic"), alpha = 1) +
+  labs(title = "Logistic Growth Simulation",
+       x = "Time",
+       y = "Population Size",
+       color = "Model Type") +
+  theme_bw()
+```
+
+## Stochastic
+
+```{r}
+logistic_stochastic <- odin::odin({
+  update(N) <- N + births - deaths
+  
+  p_N <- b
+  p_d <- d * (1 + (N / K))
+  
+  deaths <- rbinom(N, p_d / dt)
+  births <- rbinom(N, p_N  / dt)
+
+  initial(N) <- N0
+
+  K <- user(150)
+  b <- user(0.02)
+  d <- user(0.01)
+  N0 <- user(10)
+  dt <- user(1)
+
+}, verbose = FALSE)
+```
+
+```{r}
+#| echo: FALSE
+log_stoch_model <- logistic_stochastic$new()
+result_stoch <- log_stoch_model$run(0:1000, replicate = 50)
+result_stoch <- log_stoch_model$transform_variables(result_stoch)
+result_stoch <- cbind.data.frame(t = result_stoch[[1]], result_stoch[-1]) |>
+  pivot_longer(-t)
+
+ggplot() +
+  geom_line(data = result_stoch, aes(x = t, y = value, group = name, color = "Stochastic"), alpha = 0.25) +
+  scale_color_manual(values = c("Stochastic" = "blue", "Deterministic" = "red")) +
+  labs(title = "Logistic Growth Simulation",
+       x = "Time",
+       y = "Population Size",
+       color = "Model Type") +
+  theme_bw()
+```
+
+## Migration
+
+```{r}
+gen <- odin::odin({ 
+  deriv(y[]) <- r[i] * y[i] * (1 - y[i]/K[i]) + immigrants[i] - emmigrants[i]
+  
+  emmigrants[] <- nu * y[i]
+  utility[,] <- y[j] ^ alpha * exp(-m[i, j] / beta)
+  migrant_balance[] <- sum(utility[i,])
+  migrant_flow[,] <-  emmigrants[i] * utility[i,j] / migrant_balance[i]
+  immigrants[] <- sum(migrant_flow[, i])
+
+  initial(y[]) <- y0[i]
+    
+  y0[] <- user()
+  r[] <- user()
+  m[,] <- user()
+  K[] <- user()
+  nu <- user(0.05)
+  beta <- user(5)
+  alpha <- user(1)
+  
+  dim(K) <- user()
+  n <- length(K)
+  dim(r) <- n
+  dim(y) <- n 
+  dim(y0) <- n 
+  dim(m) <- c(n, n)
+  dim(migrant_balance) <- n
+  dim(emmigrants) <- n
+  dim(immigrants) <- n
+  dim(utility)  <- c(n, n)
+  dim(migrant_flow)  <- c(n, n)
+})
+
+pars <- list(K = c(150, 50),
+  r = c(0.01, 0.02),
+             y0 = c(10, 20),
+             m = matrix(c(1, 10, 10, 1), nrow = 2))
+
+mod <- gen$new(user = pars)
+
+y <- mod$run(1:500)
+
+y %>%
+  as.data.frame() %>%
+  pivot_longer(-t) %>%
+ggplot(aes(t, value, group = name)) +
+  geom_line()
+```
+
+```{r}
+library(sf)
+library(tidygraph)
+library(ggraph)
+radius <- 5 # radius for each hinterland tile in km
+pop_start <- 25 # starting population per settlement
+food_start <- 100
+
+hex <- c(40, -69, -40, -69, -80, 0, 
+                 -40, 70, 40, 69, 80, 0, 40, -69) %>% # changing one 69 in the top corner to a 70 helps for some reason
+  matrix(nrow = 7, byrow = 2) %>%
+  list %>%
+  st_polygon() %>%
+  st_sfc() %>%
+  st_sf()
+
+hinterlands <- hex %>%
+  st_make_grid(cellsize = radius * sqrt(3), square = FALSE) %>% # st_make_grid wants the short diagonal
+  st_sf() %>%
+  .[hex,]
+
+n <- nrow(hinterlands)
+
+pts <- hinterlands %>%
+  st_centroid() %>%
+  st_coordinates()
+
+settlements <- hinterlands %>%
+  st_centroid() %>%
+  st_distance() %>%
+  round(2) %>%
+  replace(. == 0, 9999) %>%
+  as_tbl_graph() %>%
+  mutate(id = 1:n(),
+         population = pop_start,
+         food = food_start,
+         x = pts[,1], 
+         y = pts[,2],
+         eq = 0) %E>%
+  rename(distance = weight) %>%
+  mutate(distance = if_else(distance == 9999, radius * 0.5, distance),
+         trade_flow = 0,
+         migrant_flow = 0) 
+
+dist_mat <- settlements %>% select(distance) %>%
+  as_tibble() %>% 
+  pivot_wider(names_from = to, values_from = distance) %>%
+  column_to_rownames('from') %>%
+  as.matrix()
+```
+
+```{r}
+
+pars <- list(K = rep(200, 300),
+  r = rep(0.01, 300),
+             y0 = rep(10, 300),
+             m = dist_mat,
+  nu = .5,
+  beta = 1)
+
+mod <- gen$new(user = pars)
+
+y <- mod$run(1:500)
+
+y %>%
+  as.data.frame() %>%
+  setNames(c('time', 1:300)) %>%
+  pivot_longer(-time, names_to = 'id', names_transform = list(id = as.integer)) %>%
+  left_join(as_tibble(settlements, 'nodes'), .) %>%
+  filter(time == 500) %>%
+  ggplot(aes(x, y, size = value)) +
+  geom_point()
+
+  y %>%
+      as.data.frame() %>%
+      pivot_longer(-t) %>%
+      ggplot(aes(t, value, group = name)) +
+      geom_line() +
+      labs(title = "Population dynamics with migration",
+           x = "Time",
+           y = "Population size")
+
+```
+
+```{r}
+library(miniUI)
+getMigrationRate <- function() {
+  
+  ui <- miniPage(
+    gadgetTitleBar("Set Migration Rate"),
+    miniContentPanel(
+      sliderInput("nu", "Migration rate (nu)", min = 0, max = 1, value = 0.05),
+      sliderInput("beta", "friction (beta)", min = 0, max = 30, value = 5),
+       sliderInput("alpha", "attractiveness (alpha)", min = .5, max = 2, value = 1),
+      plotOutput("plot")
+    )
+  )
+  
+  server <- function(input, output, session) {
+   
+output$plot <- renderPlot({
+   pars <- list(K = rep(200, 300),
+  r = rep(0.01, 300),
+             y0 = rep(10, 300),
+             m = dist_mat,
+  nu = input$nu,
+  beta = input$beta,
+  alpha = input$alpha)
+
+mod <- gen$new(user = pars)
+
+y <- mod$run(1:500)
+
+y %>%
+  as.data.frame() %>%
+  setNames(c('time', 1:300)) %>%
+  pivot_longer(-time, names_to = 'id', names_transform = list(id = as.integer)) %>%
+  left_join(as_tibble(settlements, 'nodes'), .) %>%
+  filter(time == 500) %>%
+  ggplot(aes(x, y, size = value)) +
+  geom_point() +
+  theme_bw() +
+  coord_fixed()
+    })
+  }
+  
+  runGadget(ui, server)
+}
+
+# Use the gadget to get the migration rate
+selectedRate <- getMigrationRate()
+
+# The variable selectedRate will contain the value of nu when the gadget is closed.
+print(paste("Selected migration rate: ", selectedRate))
+```
+
+```{r}
+library(gganimate)
+an <- y %>%
+  as.data.frame() %>%
+  setNames(c('time', 1:300)) %>%
+  pivot_longer(-time, names_to = 'id', names_transform = list(id = as.integer)) %>%
+  left_join(as_tibble(settlements, 'nodes'), .) %>%
+  ggplot(aes(x, y, size = value)) +
+  geom_point() +
+  transition_time(time) +
+  theme_bw() +
+  coord_fixed()
+
+animate(an)
+```
+
+## Stochastic migration
+
+```{r}
+stoch_migration <- odin::odin({ 
+   update(N[]) <- N[i] + births[i] - deaths[i] + immigrants[i] - emmigrants[i]
+  
+  p_N <- b
+  p_d[] <- d * (1 + (N[i] / K[i]))
+  
+  deaths[] <- rbinom(N[i], p_d[i])
+  births[] <- rbinom(N[i], p_N)
+  
+  emmigrants[] <- rbinom(N[i] - deaths[i], nu)
+  utility[,] <- N[j] ^ alpha * exp(-m[i, j] / beta)
+  migrant_balance[] <- sum(utility[i,])
+  migrant_prob[,] <-  utility[i,j] / migrant_balance[i]
+  migrant_flow[, 1] <- rbinom(emmigrants[i], migrant_prob[i, 1]) 
+  migrant_flow[, 2:n_pop] <- rbinom(emmigrants[i] - sum(migrant_flow[i, 1:(j - 1)]), migrant_prob[i, j] / (if (sum(migrant_prob[i, j:n_pop]) > 0) sum(migrant_prob[i, j:n_pop]) else 1 )) # is this [i, i:n_pop] or [i:n_pop, j] ?
+#  ah this is divide by zero!
+  immigrants[] <- sum(migrant_flow[, i])
+
+  initial(N[]) <- N0[i]
+  
+  N0[] <- user()
+  m[,] <- user()
+  K[] <- user()
+  b <- user(0.02)
+  d <- user(0.01)
+  nu <- user(0.05)
+  beta <- user(5)
+  alpha <- user(1)
+  
+  dim(K) <- user()
+  n_pop <- length(K)
+  dim(births) <- n_pop
+  dim(deaths) <- n_pop
+  dim(N) <- n_pop 
+  dim(N0) <- n_pop 
+  dim(m) <- c(n_pop, n_pop)
+  dim(p_d) <- n_pop
+  dim(migrant_balance) <- n_pop
+  dim(emmigrants) <- n_pop
+  dim(immigrants) <- n_pop
+  dim(utility)  <- c(n_pop, n_pop)
+  dim(migrant_prob)  <- c(n_pop, n_pop)
+  dim(migrant_flow)  <- c(n_pop, n_pop)
+})
+
+pars <- list(K = c(150, 50, 50),
+             N0 = c(2, 2, 2),
+             m = matrix(c(1, 10, 10, 10, 1, 10, 10, 10, 1), nrow = 3))
+             #m = matrix(c(1, 10, 10, 1), nrow = 2))
+
+mod <- stoch_migration$new(user = pars)
+mod$contents()
+y <- mod$run(1:300, replicate = 1)
+# need to shape better
+    result_stoch <- mod$transform_variables(y)
+ cbind.data.frame(t = result_stoch[[1]], result_stoch[-1]) |>
+      pivot_longer(-t) %>%
+ggplot(aes(t, value, group = name)) +
+  geom_line()
+```
+
+```{r}
+pars <- list(K = rep(200, 300),
+             N0 = rep(20, 300),
+             m = dist_mat,
+             n = 1.15)
+
+mod <- stoch_migration$new(user = pars)
+nsim <- 100
+y <- mod$run(1:nsim)
+
+y %>%
+  as.data.frame() %>%
+  setNames(c('time', 1:300)) %>%
+  pivot_longer(-time, names_to = 'id', names_transform = list(id = as.integer)) %>%
+  left_join(as_tibble(settlements, 'nodes'), .) %>%
+  filter(time == nsim) %>%
+  ggplot(aes(x, y, size = value)) +
+  geom_point() +
+  scale_size_area()
+
+  y %>%
+      as.data.frame() %>%
+      pivot_longer(-step) %>%
+      ggplot(aes(step, value, group = name)) +
+      geom_line(alpha = 0.1) +
+      labs(title = "Population dynamics with migration",
+           x = "Time",
+           y = "Population size")
+```
+
+```{r}
+ y %>%
+  as.data.frame() %>%
+  setNames(c('time', 1:300)) %>%
+  pivot_longer(-time, names_to = 'id', names_transform = list(id = as.integer)) %>%
+  left_join(as_tibble(settlements, 'nodes'), .) %>%
+  ggplot(aes(x, y, size = value)) +
+  geom_point() +
+  transition_time(time) +
+  theme_bw() +
+  coord_fixed()
+```
+
+```{r}
+remotes::install_github('mrc-ide/odin.dust')
+library(odin.dust)
+gen_stoch <- odin.dust::odin_dust("../R/stoch_mig.R")
+
+dust_model <- gen_stoch$new(pars = pars,
+                         time = 1,
+                         n_particles = 10L,
+                         n_threads = 10L,
+                         seed = 1L)
+dust_model$state()
+dust_model$run(200)
+dust::dust_openmp_threads(100, "fix")
+dust::dust_openmp_support(check_compile = TRUE)
+
+
+```
+
+## Age structure
+
+```{r}
+logistic_age <- odin::odin({
+  initial(N[1]) <- 0  # Initial infant population
+  initial(N[2]) <- 5  # Initial juvenile population
+  initial(N[3]) <- 10  # Initial adult population
+  initial(N[4]) <- 0  # Initial elderly population
+  
+  beta <- 0.1  # Birth rate for adults
+  delta[1] <- 0.04  # High mortality rate for infants
+  delta[2] <- 0.005  # Lower mortality rate for juveniles
+  delta[3] <- 0.01  # Mortality rate for adults
+  delta[4] <- 0.03  # Higher mortality rate for elderly
+  
+  N_tot <- sum(N)
+
+  delta_adj[] <- delta[i] * (1 + (N_tot / K))
+  
+  ## Transitions
+  # Binomial distribution for births from adults only
+  b <- rbinom(N[3], beta)
+  
+  # Binomial distribution for deaths, for each age group
+  d[] <- rbinom(N[i], delta_adj[i])
+  
+  N_after_death[] <- N[i] - d[i]
+  
+  ## Aging transitions: Simplified as complete transition between classes yearly
+  transition_to_juvenile <- rbinom(N_after_death[1], 1/6)
+  transition_to_adult <- rbinom(N_after_death[2], 1/11)
+  transition_to_elderly <- rbinom(N_after_death[3], 1/51)
+  
+  ## Update
+  # Update infant population: new births come here
+  update(N[1]) <- N_after_death[1] + b - transition_to_juvenile
+  
+  # Update juvenile population
+  update(N[2]) <- N_after_death[2] + transition_to_juvenile - transition_to_adult
+  
+  # Update adult population
+  update(N[3]) <- N_after_death[3] + transition_to_adult - transition_to_elderly
+  
+  # Update elderly population
+  update(N[4]) <- N_after_death[4] + transition_to_elderly
+
+  K <- user(150)
+  dim(N) <- 4
+  dim(delta) <- 4
+  dim(delta_adj) <- 4
+  dim(d) <- 4
+  dim(N_after_death) <- 4
+
+}, verbose = FALSE)
+```
+
+```{r}
+#| echo: FALSE
+  log_stoch_model <- logistic_age$new(k = 1000)
+    result_stoch <- log_stoch_model$run(0:1000, replicate = 1)
+    result_stoch <- log_stoch_model$transform_variables(result_stoch)
+    result_stoch <- cbind.data.frame(t = result_stoch[[1]], result_stoch[-1]) |>
+      pivot_longer(-t)
+
+      ggplot() +
+        geom_line(data = result_stoch, aes(x = t, y = value, group = name, color = name), alpha = 0.25) +
+        labs(title = "Logistic Growth Simulation",
+             x = "Time",
+             y = "Population Size",
+             color = "Model Type") +
+        theme_bw()
+```
+
+```{r}
+fertility_table <- tibble(
+  age = 0:119,
+  fertility_rate = c(rep(0, 12), 0.022, 0.022, 0.022, rep(c(0.232, 0.343, 0.367, 0.293, 0.218, 0.216, 0.134), each = 5), rep(0, 70))
+)
+
+mortality_table <- tibble(
+  age = 0:119,
+  mortality_rate = c(0.381, rep(0.063, 4), rep(c(0.013, 0.010, 0.013, 0.016, 0.018, 0.020, 0.022, 0.024, 0.025, 0.033, 0.042, 0.062, 0.084, 0.122, 0.175, 0.254, 0.376, 0.552, 0.816, 1, 1, 1, 1), each = 5))
+)
+
+
+mortality_table
+
+
+```
+
+```{r}
+mean(c(.381, .063, .063, .063, .063))
+```

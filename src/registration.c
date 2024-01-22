@@ -23,6 +23,8 @@ extern void fiscal_demographic_rhs_desolve(void *);
 extern void fiscal_demographic_war_initmod_desolve(void *);
 extern void fiscal_demographic_war_rhs_dde(void *);
 extern void fiscal_demographic_war_rhs_desolve(void *);
+extern void janssen_rhs_dde(void *);
+extern void janssen_stochastic_rhs_dde(void *);
 extern void nefedov_initmod_desolve(void *);
 extern void nefedov_rhs_dde(void *);
 extern void nefedov_rhs_desolve(void *);
@@ -69,6 +71,20 @@ extern SEXP fiscal_demographic_war_metadata(void *);
 extern SEXP fiscal_demographic_war_rhs_r(void *, void *, void *);
 extern SEXP fiscal_demographic_war_set_initial(void *, void *, void *, void *);
 extern SEXP fiscal_demographic_war_set_user(void *, void *);
+extern SEXP janssen_contents(void *);
+extern SEXP janssen_create(void *);
+extern SEXP janssen_initial_conditions(void *, void *);
+extern SEXP janssen_metadata(void *);
+extern SEXP janssen_rhs_r(void *, void *, void *);
+extern SEXP janssen_set_initial(void *, void *, void *, void *);
+extern SEXP janssen_set_user(void *, void *);
+extern SEXP janssen_stochastic_contents(void *);
+extern SEXP janssen_stochastic_create(void *);
+extern SEXP janssen_stochastic_initial_conditions(void *, void *);
+extern SEXP janssen_stochastic_metadata(void *);
+extern SEXP janssen_stochastic_rhs_r(void *, void *, void *);
+extern SEXP janssen_stochastic_set_initial(void *, void *, void *, void *);
+extern SEXP janssen_stochastic_set_user(void *, void *);
 extern SEXP nefedov_contents(void *);
 extern SEXP nefedov_create(void *);
 extern SEXP nefedov_initial_conditions(void *, void *);
@@ -107,6 +123,8 @@ static const R_CMethodDef CEntries[] = {
     {"fiscal_demographic_war_initmod_desolve",   (DL_FUNC) &fiscal_demographic_war_initmod_desolve,   1},
     {"fiscal_demographic_war_rhs_dde",           (DL_FUNC) &fiscal_demographic_war_rhs_dde,           1},
     {"fiscal_demographic_war_rhs_desolve",       (DL_FUNC) &fiscal_demographic_war_rhs_desolve,       1},
+    {"janssen_rhs_dde",                          (DL_FUNC) &janssen_rhs_dde,                          1},
+    {"janssen_stochastic_rhs_dde",               (DL_FUNC) &janssen_stochastic_rhs_dde,               1},
     {"nefedov_initmod_desolve",                  (DL_FUNC) &nefedov_initmod_desolve,                  1},
     {"nefedov_rhs_dde",                          (DL_FUNC) &nefedov_rhs_dde,                          1},
     {"nefedov_rhs_desolve",                      (DL_FUNC) &nefedov_rhs_desolve,                      1},
@@ -155,6 +173,20 @@ static const R_CallMethodDef CallEntries[] = {
     {"fiscal_demographic_war_rhs_r",                (DL_FUNC) &fiscal_demographic_war_rhs_r,                3},
     {"fiscal_demographic_war_set_initial",          (DL_FUNC) &fiscal_demographic_war_set_initial,          4},
     {"fiscal_demographic_war_set_user",             (DL_FUNC) &fiscal_demographic_war_set_user,             2},
+    {"janssen_contents",                            (DL_FUNC) &janssen_contents,                            1},
+    {"janssen_create",                              (DL_FUNC) &janssen_create,                              1},
+    {"janssen_initial_conditions",                  (DL_FUNC) &janssen_initial_conditions,                  2},
+    {"janssen_metadata",                            (DL_FUNC) &janssen_metadata,                            1},
+    {"janssen_rhs_r",                               (DL_FUNC) &janssen_rhs_r,                               3},
+    {"janssen_set_initial",                         (DL_FUNC) &janssen_set_initial,                         4},
+    {"janssen_set_user",                            (DL_FUNC) &janssen_set_user,                            2},
+    {"janssen_stochastic_contents",                 (DL_FUNC) &janssen_stochastic_contents,                 1},
+    {"janssen_stochastic_create",                   (DL_FUNC) &janssen_stochastic_create,                   1},
+    {"janssen_stochastic_initial_conditions",       (DL_FUNC) &janssen_stochastic_initial_conditions,       2},
+    {"janssen_stochastic_metadata",                 (DL_FUNC) &janssen_stochastic_metadata,                 1},
+    {"janssen_stochastic_rhs_r",                    (DL_FUNC) &janssen_stochastic_rhs_r,                    3},
+    {"janssen_stochastic_set_initial",              (DL_FUNC) &janssen_stochastic_set_initial,              4},
+    {"janssen_stochastic_set_user",                 (DL_FUNC) &janssen_stochastic_set_user,                 2},
     {"nefedov_contents",                            (DL_FUNC) &nefedov_contents,                            1},
     {"nefedov_create",                              (DL_FUNC) &nefedov_create,                              1},
     {"nefedov_initial_conditions",                  (DL_FUNC) &nefedov_initial_conditions,                  2},

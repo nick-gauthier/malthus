@@ -113,3 +113,28 @@ run_sim(fiscal_demographic, 500, tidy = FALSE) |>
   scale_color_viridis_c() +
   theme_bw()
 ```
+
+```{r}
+run_sim(janssen, 2000, P0 = 1) |>
+  ggplot(aes(time, value)) +
+  geom_line(linewidth = 1.2) +
+  facet_wrap(~var, scales = 'free_y', nrow = 2) +
+  theme_bw()
+```
+
+```{r}
+run_sim(janssen, 500, P0 = 1, tidy = FALSE) |>
+ ggplot(aes(P, R)) +
+  geom_path(aes(color = time)) +
+  geom_point(aes(color = time)) +
+  scale_color_viridis_c() +
+  theme_bw()
+```
+
+```{r}
+purrr::map_dfr(1:100, ~run_sim(janssen_stochastic, P0 = 10, c = 1000), .id = 'rep') |>
+  ggplot(aes(time, value, group = rep)) +
+  geom_line(linewidth = 1.2, alpha = 0.2) +
+  facet_wrap(~var, scales = 'free_y', nrow = 2) +
+  theme_bw()
+```
