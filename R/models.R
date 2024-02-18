@@ -11,4 +11,5 @@
 ##' @export brander_taylor
 ##' @export janssen
 ##' @export janssen_stochastic
+##' @export adaptive_capacity
 NULL

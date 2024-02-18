@@ -5,6 +5,26 @@
 #include <Rinternals.h>
 #include <stdbool.h>
 #include <R_ext/Rdynload.h>
+typedef struct adaptive_capacity_internal {
+  double a1;
+  double a2;
+  double alpha;
+  double b1;
+  double b2;
+  double C;
+  int *delay_index_N_lag_fitness;
+  int *delay_index_N_lag_resources;
+  double *delay_state_N_lag_fitness;
+  double *delay_state_N_lag_resources;
+  double fmin;
+  double initial_N;
+  double initial_t;
+  double r;
+  double S;
+  double tau1;
+  double tau2;
+  bool adaptive_capacity_use_dde;
+} adaptive_capacity_internal;
 typedef struct brander_taylor_internal {
   double alpha;
   double beta;
@@ -133,6 +153,20 @@ typedef struct stateless_war_internal {
   double K;
   double r;
 } stateless_war_internal;
+adaptive_capacity_internal* adaptive_capacity_get_internal(SEXP internal_p, int closed_error);
+static void adaptive_capacity_finalise(SEXP internal_p);
+SEXP adaptive_capacity_create(SEXP user);
+void adaptive_capacity_initmod_desolve(void(* odeparms) (int *, double *));
+SEXP adaptive_capacity_contents(SEXP internal_p);
+SEXP adaptive_capacity_set_user(SEXP internal_p, SEXP user);
+SEXP adaptive_capacity_set_initial(SEXP internal_p, SEXP t_ptr, SEXP state_ptr, SEXP adaptive_capacity_use_dde_ptr);
+SEXP adaptive_capacity_metadata(SEXP internal_p);
+SEXP adaptive_capacity_initial_conditions(SEXP internal_p, SEXP t_ptr);
+void adaptive_capacity_rhs(adaptive_capacity_internal* internal, double t, double * state, double * dstatedt, double * output);
+void adaptive_capacity_rhs_dde(size_t neq, double t, double * state, double * dstatedt, void * internal);
+void adaptive_capacity_rhs_desolve(int * neq, double * t, double * state, double * dstatedt, double * output, int * np);
+void adaptive_capacity_output_dde(size_t n_eq, double t, double * state, size_t n_output, double * output, void * internal_p);
+SEXP adaptive_capacity_rhs_r(SEXP internal_p, SEXP t, SEXP state);
 brander_taylor_internal* brander_taylor_get_internal(SEXP internal_p, int closed_error);
 static void brander_taylor_finalise(SEXP internal_p);
 SEXP brander_taylor_create(SEXP user);
@@ -272,8 +306,294 @@ void user_check_values_int(int * value, size_t len,
 void user_check_values(SEXP value, double min, double max,
                            const char *name);
 SEXP user_list_element(SEXP list, const char *name);
+void lagvalue(double t, bool use_dde, int *idx, int dim_idx, double *state);
+void lagvalue_dde(double t, int *idx, size_t dim_idx, double *state);
+void lagvalue_ds(double t, int *idx, int dim_idx, double *state);
 double scalar_real(SEXP x, const char * name);
 int scalar_int(SEXP x, const char * name);
+adaptive_capacity_internal* adaptive_capacity_get_internal(SEXP internal_p, int closed_error) {
+  adaptive_capacity_internal *internal = NULL;
+  if (TYPEOF(internal_p) != EXTPTRSXP) {
+    Rf_error("Expected an external pointer");
+  }
+  internal = (adaptive_capacity_internal*) R_ExternalPtrAddr(internal_p);
+  if (!internal && closed_error) {
+    Rf_error("Pointer has been invalidated");
+  }
+  return internal;
+}
+void adaptive_capacity_finalise(SEXP internal_p) {
+  adaptive_capacity_internal *internal = adaptive_capacity_get_internal(internal_p, 0);
+  if (internal_p) {
+    R_Free(internal->delay_index_N_lag_fitness);
+    R_Free(internal->delay_index_N_lag_resources);
+    R_Free(internal->delay_state_N_lag_fitness);
+    R_Free(internal->delay_state_N_lag_resources);
+    R_Free(internal);
+    R_ClearExternalPtr(internal_p);
+  }
+}
+SEXP adaptive_capacity_create(SEXP user) {
+  adaptive_capacity_internal *internal = (adaptive_capacity_internal*) R_Calloc(1, adaptive_capacity_internal);
+  internal->delay_index_N_lag_fitness = NULL;
+  internal->delay_index_N_lag_resources = NULL;
+  internal->delay_state_N_lag_fitness = NULL;
+  internal->delay_state_N_lag_resources = NULL;
+  R_Free(internal->delay_index_N_lag_fitness);
+  internal->delay_index_N_lag_fitness = R_Calloc(1, int);
+  R_Free(internal->delay_state_N_lag_fitness);
+  internal->delay_state_N_lag_fitness = R_Calloc(1, double);
+  internal->delay_index_N_lag_fitness[0] = 0;
+  R_Free(internal->delay_index_N_lag_resources);
+  internal->delay_index_N_lag_resources = R_Calloc(1, int);
+  R_Free(internal->delay_state_N_lag_resources);
+  internal->delay_state_N_lag_resources = R_Calloc(1, double);
+  internal->delay_index_N_lag_resources[0] = 0;
+  internal->initial_N = 0.01;
+  internal->a1 = 0;
+  internal->a2 = 3;
+  internal->alpha = 2;
+  internal->b1 = 0;
+  internal->b2 = 0;
+  internal->C = 1;
+  internal->fmin = 0.10000000000000001;
+  internal->r = 0.25;
+  internal->S = 0.5;
+  internal->tau1 = 0;
+  internal->tau2 = 0;
+  internal->initial_t = NA_REAL;
+  SEXP ptr = PROTECT(R_MakeExternalPtr(internal, R_NilValue, R_NilValue));
+  R_RegisterCFinalizer(ptr, adaptive_capacity_finalise);
+  UNPROTECT(1);
+  return ptr;
+}
+static adaptive_capacity_internal *adaptive_capacity_internal_ds;
+void adaptive_capacity_initmod_desolve(void(* odeparms) (int *, double *)) {
+  static DL_FUNC get_desolve_gparms = NULL;
+  if (get_desolve_gparms == NULL) {
+    get_desolve_gparms =
+      R_GetCCallable("deSolve", "get_deSolve_gparms");
+  }
+  adaptive_capacity_internal_ds = adaptive_capacity_get_internal(get_desolve_gparms(), 1);
+}
+SEXP adaptive_capacity_contents(SEXP internal_p) {
+  adaptive_capacity_internal *internal = adaptive_capacity_get_internal(internal_p, 1);
+  SEXP contents = PROTECT(allocVector(VECSXP, 18));
+  SET_VECTOR_ELT(contents, 0, ScalarReal(internal->a1));
+  SET_VECTOR_ELT(contents, 1, ScalarReal(internal->a2));
+  SET_VECTOR_ELT(contents, 2, ScalarReal(internal->alpha));
+  SET_VECTOR_ELT(contents, 3, ScalarReal(internal->b1));
+  SET_VECTOR_ELT(contents, 4, ScalarReal(internal->b2));
+  SET_VECTOR_ELT(contents, 5, ScalarReal(internal->C));
+  SEXP delay_index_N_lag_fitness = PROTECT(allocVector(INTSXP, 1));
+  memcpy(INTEGER(delay_index_N_lag_fitness), internal->delay_index_N_lag_fitness, 1 * sizeof(int));
+  SET_VECTOR_ELT(contents, 6, delay_index_N_lag_fitness);
+  SEXP delay_index_N_lag_resources = PROTECT(allocVector(INTSXP, 1));
+  memcpy(INTEGER(delay_index_N_lag_resources), internal->delay_index_N_lag_resources, 1 * sizeof(int));
+  SET_VECTOR_ELT(contents, 7, delay_index_N_lag_resources);
+  SEXP delay_state_N_lag_fitness = PROTECT(allocVector(REALSXP, 1));
+  memcpy(REAL(delay_state_N_lag_fitness), internal->delay_state_N_lag_fitness, 1 * sizeof(double));
+  SET_VECTOR_ELT(contents, 8, delay_state_N_lag_fitness);
+  SEXP delay_state_N_lag_resources = PROTECT(allocVector(REALSXP, 1));
+  memcpy(REAL(delay_state_N_lag_resources), internal->delay_state_N_lag_resources, 1 * sizeof(double));
+  SET_VECTOR_ELT(contents, 9, delay_state_N_lag_resources);
+  SET_VECTOR_ELT(contents, 10, ScalarReal(internal->fmin));
+  SET_VECTOR_ELT(contents, 11, ScalarReal(internal->initial_N));
+  SET_VECTOR_ELT(contents, 12, ScalarReal(internal->initial_t));
+  SET_VECTOR_ELT(contents, 13, ScalarReal(internal->r));
+  SET_VECTOR_ELT(contents, 14, ScalarReal(internal->S));
+  SET_VECTOR_ELT(contents, 15, ScalarReal(internal->tau1));
+  SET_VECTOR_ELT(contents, 16, ScalarReal(internal->tau2));
+  SET_VECTOR_ELT(contents, 17, ScalarLogical(internal->adaptive_capacity_use_dde));
+  SEXP nms = PROTECT(allocVector(STRSXP, 18));
+  SET_STRING_ELT(nms, 0, mkChar("a1"));
+  SET_STRING_ELT(nms, 1, mkChar("a2"));
+  SET_STRING_ELT(nms, 2, mkChar("alpha"));
+  SET_STRING_ELT(nms, 3, mkChar("b1"));
+  SET_STRING_ELT(nms, 4, mkChar("b2"));
+  SET_STRING_ELT(nms, 5, mkChar("C"));
+  SET_STRING_ELT(nms, 6, mkChar("delay_index_N_lag_fitness"));
+  SET_STRING_ELT(nms, 7, mkChar("delay_index_N_lag_resources"));
+  SET_STRING_ELT(nms, 8, mkChar("delay_state_N_lag_fitness"));
+  SET_STRING_ELT(nms, 9, mkChar("delay_state_N_lag_resources"));
+  SET_STRING_ELT(nms, 10, mkChar("fmin"));
+  SET_STRING_ELT(nms, 11, mkChar("initial_N"));
+  SET_STRING_ELT(nms, 12, mkChar("initial_t"));
+  SET_STRING_ELT(nms, 13, mkChar("r"));
+  SET_STRING_ELT(nms, 14, mkChar("S"));
+  SET_STRING_ELT(nms, 15, mkChar("tau1"));
+  SET_STRING_ELT(nms, 16, mkChar("tau2"));
+  SET_STRING_ELT(nms, 17, mkChar("adaptive_capacity_use_dde"));
+  setAttrib(contents, R_NamesSymbol, nms);
+  UNPROTECT(6);
+  return contents;
+}
+SEXP adaptive_capacity_set_user(SEXP internal_p, SEXP user) {
+  adaptive_capacity_internal *internal = adaptive_capacity_get_internal(internal_p, 1);
+  internal->a1 = user_get_scalar_double(user, "a1", internal->a1, NA_REAL, NA_REAL);
+  internal->a2 = user_get_scalar_double(user, "a2", internal->a2, NA_REAL, NA_REAL);
+  internal->alpha = user_get_scalar_double(user, "alpha", internal->alpha, NA_REAL, NA_REAL);
+  internal->b1 = user_get_scalar_double(user, "b1", internal->b1, NA_REAL, NA_REAL);
+  internal->b2 = user_get_scalar_double(user, "b2", internal->b2, NA_REAL, NA_REAL);
+  internal->C = user_get_scalar_double(user, "C", internal->C, NA_REAL, NA_REAL);
+  internal->fmin = user_get_scalar_double(user, "fmin", internal->fmin, NA_REAL, NA_REAL);
+  internal->r = user_get_scalar_double(user, "r", internal->r, NA_REAL, NA_REAL);
+  internal->S = user_get_scalar_double(user, "S", internal->S, NA_REAL, NA_REAL);
+  internal->tau1 = user_get_scalar_double(user, "tau1", internal->tau1, NA_REAL, NA_REAL);
+  internal->tau2 = user_get_scalar_double(user, "tau2", internal->tau2, NA_REAL, NA_REAL);
+  return R_NilValue;
+}
+SEXP adaptive_capacity_set_initial(SEXP internal_p, SEXP t_ptr, SEXP state_ptr, SEXP adaptive_capacity_use_dde_ptr) {
+  adaptive_capacity_internal *internal = adaptive_capacity_get_internal(internal_p, 1);
+  const double t = REAL(t_ptr)[0];
+  internal->initial_t = t;
+  internal->adaptive_capacity_use_dde = INTEGER(adaptive_capacity_use_dde_ptr)[0];
+  if (state_ptr != R_NilValue) {
+    double * state = REAL(state_ptr);
+    internal->initial_N = state[0];
+  }
+  return R_NilValue;
+}
+SEXP adaptive_capacity_metadata(SEXP internal_p) {
+  adaptive_capacity_internal *internal = adaptive_capacity_get_internal(internal_p, 1);
+  SEXP ret = PROTECT(allocVector(VECSXP, 4));
+  SEXP nms = PROTECT(allocVector(STRSXP, 4));
+  SET_STRING_ELT(nms, 0, mkChar("variable_order"));
+  SET_STRING_ELT(nms, 1, mkChar("output_order"));
+  SET_STRING_ELT(nms, 2, mkChar("n_out"));
+  SET_STRING_ELT(nms, 3, mkChar("interpolate_t"));
+  setAttrib(ret, R_NamesSymbol, nms);
+  SEXP variable_length = PROTECT(allocVector(VECSXP, 1));
+  SEXP variable_names = PROTECT(allocVector(STRSXP, 1));
+  setAttrib(variable_length, R_NamesSymbol, variable_names);
+  SET_VECTOR_ELT(variable_length, 0, R_NilValue);
+  SET_STRING_ELT(variable_names, 0, mkChar("N"));
+  SET_VECTOR_ELT(ret, 0, variable_length);
+  UNPROTECT(2);
+  SEXP output_length = PROTECT(allocVector(VECSXP, 1));
+  SEXP output_names = PROTECT(allocVector(STRSXP, 1));
+  setAttrib(output_length, R_NamesSymbol, output_names);
+  SET_VECTOR_ELT(output_length, 0, R_NilValue);
+  SET_STRING_ELT(output_names, 0, mkChar("fitness"));
+  SET_VECTOR_ELT(ret, 1, output_length);
+  UNPROTECT(2);
+  SET_VECTOR_ELT(ret, 2, ScalarInteger(1));
+  UNPROTECT(2);
+  return ret;
+}
+SEXP adaptive_capacity_initial_conditions(SEXP internal_p, SEXP t_ptr) {
+  double t = scalar_real(t_ptr, "t");
+  adaptive_capacity_internal *internal = adaptive_capacity_get_internal(internal_p, 1);
+  SEXP r_state = PROTECT(allocVector(REALSXP, 1));
+  double * state = REAL(r_state);
+  state[0] = internal->initial_N;
+  UNPROTECT(1);
+  return r_state;
+}
+void adaptive_capacity_rhs(adaptive_capacity_internal* internal, double t, double * state, double * dstatedt, double * output) {
+  double N = state[0];
+  // delay block for N_lag_fitness
+  double N_lag_fitness;
+  {
+    const double t_true = t;
+    const double t = t_true - internal->tau1;
+    double N;
+    if (t <= internal->initial_t) {
+      N = internal->initial_N;
+    } else {
+      lagvalue(t, internal->adaptive_capacity_use_dde, internal->delay_index_N_lag_fitness, 1, internal->delay_state_N_lag_fitness);
+      N = internal->delay_state_N_lag_fitness[0];
+    }
+    N_lag_fitness = N;
+  }
+  // delay block for N_lag_resources
+  double N_lag_resources;
+  {
+    const double t_true = t;
+    const double t = t_true - internal->tau2;
+    double N;
+    if (t <= internal->initial_t) {
+      N = internal->initial_N;
+    } else {
+      lagvalue(t, internal->adaptive_capacity_use_dde, internal->delay_index_N_lag_resources, 1, internal->delay_state_N_lag_resources);
+      N = internal->delay_state_N_lag_resources[0];
+    }
+    N_lag_resources = N;
+  }
+  double cap = internal->b1 * N_lag_resources;
+  double cap2 = internal->b2 * N_lag_resources;
+  double Kt1 = internal->C + internal->a1 + cap;
+  double Kt2 = internal->C + internal->a2 + cap2;
+  double fit1 = internal->r - (internal->S / (double) Kt1) * N_lag_fitness;
+  double K = (fit1 < internal->fmin ? Kt2 : Kt1);
+  dstatedt[0] = internal->r * N - (internal->S * pow(N, internal->alpha)) / (double) K;
+  if (output) {
+    output[0] = internal->r - (internal->S * N / (double) K);
+  }
+}
+void adaptive_capacity_rhs_dde(size_t neq, double t, double * state, double * dstatedt, void * internal) {
+  adaptive_capacity_rhs((adaptive_capacity_internal*)internal, t, state, dstatedt, NULL);
+}
+void adaptive_capacity_rhs_desolve(int * neq, double * t, double * state, double * dstatedt, double * output, int * np) {
+  adaptive_capacity_rhs(adaptive_capacity_internal_ds, *t, state, dstatedt, output);
+}
+void adaptive_capacity_output_dde(size_t n_eq, double t, double * state, size_t n_output, double * output, void * internal_p) {
+  adaptive_capacity_internal *internal = (adaptive_capacity_internal*) internal_p;
+  double N = state[0];
+  // delay block for N_lag_fitness
+  double N_lag_fitness;
+  {
+    const double t_true = t;
+    const double t = t_true - internal->tau1;
+    double N;
+    if (t <= internal->initial_t) {
+      N = internal->initial_N;
+    } else {
+      lagvalue(t, internal->adaptive_capacity_use_dde, internal->delay_index_N_lag_fitness, 1, internal->delay_state_N_lag_fitness);
+      N = internal->delay_state_N_lag_fitness[0];
+    }
+    N_lag_fitness = N;
+  }
+  // delay block for N_lag_resources
+  double N_lag_resources;
+  {
+    const double t_true = t;
+    const double t = t_true - internal->tau2;
+    double N;
+    if (t <= internal->initial_t) {
+      N = internal->initial_N;
+    } else {
+      lagvalue(t, internal->adaptive_capacity_use_dde, internal->delay_index_N_lag_resources, 1, internal->delay_state_N_lag_resources);
+      N = internal->delay_state_N_lag_resources[0];
+    }
+    N_lag_resources = N;
+  }
+  double cap = internal->b1 * N_lag_resources;
+  double cap2 = internal->b2 * N_lag_resources;
+  double Kt1 = internal->C + internal->a1 + cap;
+  double Kt2 = internal->C + internal->a2 + cap2;
+  double fit1 = internal->r - (internal->S / (double) Kt1) * N_lag_fitness;
+  double K = (fit1 < internal->fmin ? Kt2 : Kt1);
+  output[0] = internal->r - (internal->S * N / (double) K);
+}
+SEXP adaptive_capacity_rhs_r(SEXP internal_p, SEXP t, SEXP state) {
+  SEXP dstatedt = PROTECT(allocVector(REALSXP, LENGTH(state)));
+  adaptive_capacity_internal *internal = adaptive_capacity_get_internal(internal_p, 1);
+  SEXP output_ptr = PROTECT(allocVector(REALSXP, 1));
+  setAttrib(dstatedt, install("output"), output_ptr);
+  UNPROTECT(1);
+  double *output = REAL(output_ptr);
+  const double initial_t = internal->initial_t;
+  if (ISNA(initial_t)) {
+    internal->initial_t = scalar_real(t, "t");
+  }
+  adaptive_capacity_rhs(internal, scalar_real(t, "t"), REAL(state), REAL(dstatedt), output);
+  if (ISNA(initial_t)) {
+    internal->initial_t = initial_t;
+  }
+  UNPROTECT(1);
+  return dstatedt;
+}
 brander_taylor_internal* brander_taylor_get_internal(SEXP internal_p, int closed_error) {
   brander_taylor_internal *internal = NULL;
   if (TYPEOF(internal_p) != EXTPTRSXP) {
@@ -1830,6 +2150,29 @@ SEXP user_list_element(SEXP list, const char *name) {
     }
   }
   return ret;
+}
+void lagvalue(double t, bool use_dde, int *idx, int dim_idx, double *state) {
+  if (use_dde) {
+    lagvalue_dde(t, idx, dim_idx, state);
+  } else {
+    lagvalue_ds(t, idx, dim_idx, state);
+  }
+}
+void lagvalue_dde(double t, int *idx, size_t dim_idx, double *state) {
+  typedef void (*lagvalue_type)(double, int*, size_t, double*);
+  static lagvalue_type fun = NULL;
+  if (fun == NULL) {
+    fun = (lagvalue_type)R_GetCCallable("dde", "ylag_vec_int");
+  }
+  fun(t, idx, dim_idx, state);
+}
+void lagvalue_ds(double t, int *idx, int dim_idx, double *state) {
+  typedef void (*lagvalue_type)(double, int*, int, double*);
+  static lagvalue_type fun = NULL;
+  if (fun == NULL) {
+    fun = (lagvalue_type)R_GetCCallable("deSolve", "lagvalue");
+  }
+  fun(t, idx, dim_idx, state);
 }
 double scalar_real(SEXP x, const char * name) {
   if (Rf_length(x) != 1) {

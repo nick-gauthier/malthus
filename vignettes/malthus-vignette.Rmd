@@ -138,3 +138,21 @@ purrr::map_dfr(1:100, ~run_sim(janssen_stochastic, P0 = 10, c = 1000), .id = 're
   facet_wrap(~var, scales = 'free_y', nrow = 2) +
   theme_bw()
 ```
+
+```{r}
+run_sim(adaptive_capacity, 200, a2 = 1.5, S = 0.2, tau2 = 25, b2 = -.5) |>
+  ggplot(aes(time, value)) +
+  geom_line(linewidth = 1.2) +
+  facet_wrap(~var, scales = 'free_y', nrow = 2) +
+  theme_bw()
+```
+
+```{r}
+run_sim(adaptive_capacity, 200, a2 = 1.5, S = 0.2, tau2 = 25, b2 = -.5, tidy = FALSE) |>
+  ggplot(aes(N, fitness)) +
+  geom_path(aes(color = time)) +
+  geom_point(aes(color = time)) +
+  scale_color_viridis_c() +
+  theme_bw()
+```
+
