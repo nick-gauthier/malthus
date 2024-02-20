@@ -63,16 +63,16 @@ run_sim(brander_taylor, 1440) |>
 
 ## Nefedov model of population-resource dynamics
 
-The Nefedov model of population-resource dynamics is a simple model of the dynamics of a population and a resource that the population depends on. The model is given by the following set of ordinary differential equations:
+The Nefedov model of Malthusian dynamics in pre-Industrial societies [@Nefedov2013] has human population dynamics dependant on the amount of food in storage, leading to periodic oscillations that depends on intrinsic population growth rates and the number of households one farming family can support:
 
-\[
+$$
 \begin{align*}
-\frac{dN}{dt} &= rN\left(1 - \frac{N}{K}\right) - \frac{S}{K}N^{\alpha} \\
-\frac{dS}{dt} &= cS - \delta N
+\frac{dN}{dt} &= rN\left(1 - \frac{N}{K}\right) \\
+\frac{dK}{dt} &= P - N = \frac{aN}{N+d} - N
 \end{align*}
-\]
+$$
 
-where \(N\) is the population, \(S\) is the resource stock, \(r\) is the growth rate of the population, \(K\) is the environmental carrying capacity for the population, \(\alpha\) is the exponent of population pressure on the resource, \(c\) is the growth rate of the resource, and \(\delta\) is the extraction rate of the resource.
+where $N$ is the population, $K$ is the food supply in terms of "minimum annual rations", $r$ is the growth rate of the population, $P$ is the annual harvest, and $a$ and $d$ are constants. $q = a/d$ is the harvest gathered by one farmer in favorable conditions and thus the number of households one farming family can support (typically $1.2 <q < 2$).
 
 The model is implemented in the `nefedov`. The following code simulates the model for 1,000 time steps and visualizes the results.
 
