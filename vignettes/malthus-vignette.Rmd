@@ -3,8 +3,9 @@ title: "Getting started with malthus"
 output: rmarkdown::html_vignette
 vignette: >
   %\VignetteIndexEntry{Getting started with malthus}
-  %\VignetteEngine{knitr::rmarkdown}
   %\VignetteEncoding{UTF-8}
+  %\VignetteEngine{knitr::rmarkdown}
+bibliography: references.bib
 ---
 
 ```{r setup, include = FALSE}
@@ -18,21 +19,11 @@ library(malthus)
 library(ggplot2)
 ```
 
-
 # Introduction
 
 This vignette provides a brief introduction to the `malthus` package. The package provides a set of functions to simulate and visualize the dynamics of a variety of models of human-environment interactions. The models are implemented as ordinary differential equations (ODEs) and are solved using the `odin` package. The package also provides a set of functions to visualize the results of the simulations.
 
-The models included in the package are:
-- Brander-Taylor model of renewable resource management
-- Nefedov model of population-resource dynamics
-- Fiscal-demographic model of state formation
-- Elite extraction model of state formation
-- Stateless war model of state formation
-- Scaling cities model of urban growth
-- Janssen model of social-ecological systems
-- Janssen model of social-ecological systems with stochasticity
-- Adaptive capacity tradeoff model of population growth in social-ecological systems
+The models included in the package are: - Brander-Taylor model of renewable resource management - Nefedov model of population-resource dynamics - Fiscal-demographic model of state formation - Elite extraction model of state formation - Stateless war model of state formation - Scaling cities model of urban growth - Janssen model of social-ecological systems - Janssen model of social-ecological systems with stochasticity - Adaptive capacity tradeoff model of population growth in social-ecological systems
 
 # Models
 
@@ -40,16 +31,16 @@ The package includes a set of models of human-environment interactions. Each mod
 
 ## Brander-Taylor model of renewable resource management
 
-The Brander-Taylor model of renewable resource management is a simple model of the dynamics of a renewable resource and a population that depends on the resource. The model is given by the following set of ordinary differential equations: 
+The Brander-Taylor model of renewable resource management [@Brander1998] is a simple model of the dynamics of a renewable resource and a population that depends on the resource. The model is given by the following set of ordinary differential equations:
 
-\[
+$$
 \begin{align*}
 \frac{dS}{dt} &= rS\left(1 - \frac{S}{K}\right) - \alpha\beta LS \\
 \frac{dL}{dt} &= L\left(\phi\alpha\beta S - \sigma\right)
 \end{align*}
-\]
+$$
 
-where \(S\) is the resource stock, \(L\) is the population, \(r\) is the growth rate of the resource, \(K\) is the environmental carrying capacity for the resource, \(\alpha\) is the extraction efficiency, \(\beta\) is the resource preference, \(\phi\) is the procreation parameter, and \(\sigma\) is the natural death rate.
+where $S$ is the resource stock, $L$ is the population, $r$ is the growth rate of the resource, $K$ is the environmental carrying capacity for the resource, $\alpha$ is the extraction efficiency, $\beta$ is the resource preference, $\phi$ is the procreation parameter, and $\sigma$ is the natural death rate.
 
 The model is implemented in the `brander_taylor`. The following code simulates the model for 1,440 time steps and visualizes the results.
 
@@ -97,16 +88,16 @@ run_sim(nefedov, 1000, tidy = FALSE) |>
 
 ## Scaling cities model of urban growth
 
-The scaling cities model of urban growth is a simple model of the dynamics of a population and a resource that the population depends on. The model is given by the following set of ordinary differential equations:
+The scaling cities model of urban growth is a simple model of the dynamics of a population and a resource that the population depends on [@Muneepeerakul2012a]. The model is given by the following set of ordinary differential equations:
 
-\[
+$$
 \begin{align*}
 \frac{dN}{dt} &= rN\left(1 - \frac{N}{K}\right) - \frac{S}{K}N^{\alpha} \\
 \frac{dS}{dt} &= cS - \delta N
 \end{align*}
-\]
+$$
 
-where \(N\) is the population, \(S\) is the resource stock, \(r\) is the growth rate of the population, \(K\) is the environmental carrying capacity for the population, \(\alpha\) is the exponent of population pressure on the resource, \(c\) is the growth rate of the resource, and \(\delta\) is the extraction rate of the resource.
+where $N$ is the population, $S$ is the resource stock, $r$ is the growth rate of the population, $K$ is the environmental carrying capacity for the population, $\alpha$ is the exponent of population pressure on the resource, $c$ is the growth rate of the resource, and $\delta$ is the extraction rate of the resource.
 
 The model is implemented in the `scaling_cities` function. The following code simulates the model for 100 time steps and visualizes the results.
 
@@ -120,16 +111,16 @@ run_sim(scaling_cities, 100) |>
 
 ## Elite extraction model of state formation
 
-The elite extraction model of state formation is a simple model of the dynamics of a population and a resource that the population depends on. The model is given by the following set of ordinary differential equations:
+The elite extraction model of state formation is a simple model of the dynamics of a population and a resource that the population depends on [@Turchin2003]. The model is given by the following set of ordinary differential equations:
 
-\[
+$$
 \begin{align*}
 \frac{dN}{dt} &= rN\left(1 - \frac{N}{K}\right) - \frac{S}{K}N^{\alpha} \\
 \frac{dS}{dt} &= cS - \delta N
 \end{align*}
-\]
+$$
 
-where \(N\) is the population, \(S\) is the resource stock, \(r\) is the growth rate of the population, \(K\) is the environmental carrying capacity for the population, \(\alpha\) is the exponent of population pressure on the resource, \(c\) is the growth rate of the resource, and \(\delta\) is the extraction rate of the resource.
+where $N$ is the population, $S$ is the resource stock, $r$ is the growth rate of the population, $K$ is the environmental carrying capacity for the population, $\alpha$ is the exponent of population pressure on the resource, $c$ is the growth rate of the resource, and $\delta$ is the extraction rate of the resource.
 
 ```{r}
 run_sim(elite_extraction, 1000) |>
@@ -141,17 +132,16 @@ run_sim(elite_extraction, 1000) |>
 
 ## Fiscal-demographic model of state formation
 
-The fiscal-demographic model of state formation is a simple model of the dynamics of a population and a resource that the population depends on. The model is given by the following set of ordinary differential equations:
+The fiscal-demographic model of state formation is a simple model of the dynamics of a population and a resource that the population depends on [@Turchin2003]. The model is given by the following set of ordinary differential equations:
 
-\[
+$$
 \begin{align*}
 \frac{dN}{dt} &= rN\left(1 - \frac{N}{K}\right) - \frac{S}{K}N^{\alpha} \\
 \frac{dS}{dt} &= cS - \delta N
 \end{align*}
-\]
+$$
 
-where \(N\) is the population, \(S\) is the resource stock, \(r\) is the growth rate of the population, \(K\) is the environmental carrying capacity for the population, \(\alpha\) is the exponent of population pressure on the resource, \(c\) is the growth rate of the resource, and \(\delta\) is the extraction rate of the resource.
-
+where $N$ is the population, $S$ is the resource stock, $r$ is the growth rate of the population, $K$ is the environmental carrying capacity for the population, $\alpha$ is the exponent of population pressure on the resource, $c$ is the growth rate of the resource, and $\delta$ is the extraction rate of the resource.
 
 ```{r, fig.asp = 1}
 run_sim(fiscal_demographic, 500, N0 = 0.5, S0 = 0) |>
@@ -160,7 +150,6 @@ run_sim(fiscal_demographic, 500, N0 = 0.5, S0 = 0) |>
   facet_wrap(~var, scales = 'free_y', nrow = 2) +
   theme_bw()
 ```
-
 
 ```{r}
 run_sim(fiscal_demographic, 500, tidy = FALSE) |>
@@ -173,7 +162,6 @@ run_sim(fiscal_demographic, 500, tidy = FALSE) |>
 
 One can also add class stratification to the model by using the `fiscal_demographic_class` function.
 
-
 ```{r}
 run_sim(fiscal_demographic_class, 750, S0 = 1) |>
   ggplot(aes(time, value)) +
@@ -184,7 +172,6 @@ run_sim(fiscal_demographic_class, 750, S0 = 1) |>
 
 Or add war to the model by using the `fiscal_demographic_war` function.
 
-
 ```{r}
 run_sim(fiscal_demographic_war, 1000, N0 = 1, W0 = 0.5, c = .1, delta = 0.05) |>
   dplyr::filter(time > 500) |>
@@ -193,6 +180,7 @@ run_sim(fiscal_demographic_war, 1000, N0 = 1, W0 = 0.5, c = .1, delta = 0.05) |>
   facet_wrap(~var, scales = 'free_y', nrow = 2) +
   theme_bw()
 ```
+
 ```{r}
 run_sim(fiscal_demographic_war, 500, tidy = FALSE) |>
   ggplot(aes(N, S)) +
@@ -204,17 +192,16 @@ run_sim(fiscal_demographic_war, 500, tidy = FALSE) |>
 
 ## Stateless war model of state formation
 
-The stateless war model of state formation is a simple model of the dynamics of a population and a resource that the population depends on. The model is given by the following set of ordinary differential equations:
+The stateless war model of state formation is a simple model of the dynamics of a population and a resource that the population depends on [@Turchin2009]. The model is given by the following set of ordinary differential equations:
 
-\[
+$$
 \begin{align*}
 \frac{dN}{dt} &= rN\left(1 - \frac{N}{K}\right) - \frac{S}{K}N^{\alpha} \\
 \frac{dS}{dt} &= cS - \delta N
 \end{align*}
-\]
+$$
 
-where \(N\) is the population, \(S\) is the resource stock, \(r\) is the growth rate of the population, \(K\) is the environmental carrying capacity for the population, \(\alpha\) is the exponent of population pressure on the resource, \(c\) is the growth rate of the resource, and \(\delta\) is the extraction rate of the resource.
-
+where $N$ is the population, $S$ is the resource stock, $r$ is the growth rate of the population, $K$ is the environmental carrying capacity for the population, $\alpha$ is the exponent of population pressure on the resource, $c$ is the growth rate of the resource, and $\delta$ is the extraction rate of the resource.
 
 ```{r}
 run_sim(stateless_war, 200) |>
@@ -226,16 +213,16 @@ run_sim(stateless_war, 200) |>
 
 ## Janssen model of social-ecological systems
 
-The Janssen model of social-ecological systems is a simple model of the dynamics of a population and a resource that the population depends on. The model is given by the following set of ordinary differential equations:
+The Janssen model of social-ecological systems is a simple model of the dynamics of a population and a resource that the population depends on [@Janssen2010]. The model is given by the following set of ordinary differential equations:
 
-\[
+$$
 \begin{align*}
 \frac{dN}{dt} &= rN\left(1 - \frac{N}{K}\right) - \frac{S}{K}N^{\alpha} \\
 \frac{dS}{dt} &= cS - \delta N
 \end{align*}
-\]
+$$
 
-where \(N\) is the population, \(S\) is the resource stock, \(r\) is the growth rate of the population, \(K\) is the environmental carrying capacity for the population, \(\alpha\) is the exponent of population pressure on the resource, \(c\) is the growth rate of the resource, and \(\delta\) is the extraction rate of the resource.
+where $N$ is the population, $S$ is the resource stock, $r$ is the growth rate of the population, $K$ is the environmental carrying capacity for the population, $\alpha$ is the exponent of population pressure on the resource, $c$ is the growth rate of the resource, and $\delta$ is the extraction rate of the resource.
 
 ```{r}
 run_sim(janssen, 2000, P0 = 1) |>
@@ -256,7 +243,6 @@ run_sim(janssen, 500, P0 = 1, tidy = FALSE) |>
 
 One can also add stochasticity to the model by using the `janssen_stochastic` function.
 
-
 ```{r}
 purrr::map_dfr(1:100, ~run_sim(janssen_stochastic, P0 = 10, c = 1000), .id = 'rep') |>
   ggplot(aes(time, value, group = rep)) +
@@ -269,14 +255,14 @@ purrr::map_dfr(1:100, ~run_sim(janssen_stochastic, P0 = 10, c = 1000), .id = 're
 
 The adaptive capacity tradeoff model of population growth in social-ecological systems is a simple model of the dynamics of a population and a resource that the population depends on. The model is given by the following set of ordinary differential equations:
 
-\[
+$$
 \begin{align*}
 \frac{dN}{dt} &= rN\left(1 - \frac{N}{K}\right) - \frac{S}{K}N^{\alpha} \\
 \frac{dS}{dt} &= cS - \delta N
 \end{align*}
-\]
+$$
 
-where \(N\) is the population, \(S\) is the resource stock, \(r\) is the growth rate of the population, \(K\) is the environmental carrying capacity for the population, \(\alpha\) is the exponent of population pressure on the resource, \(c\) is the growth rate of the resource, and \(\delta\) is the extraction rate of the resource.
+where $N$ is the population, $S$ is the resource stock, $r$ is the growth rate of the population, $K$ is the environmental carrying capacity for the population, $\alpha$ is the exponent of population pressure on the resource, $c$ is the growth rate of the resource, and $\delta$ is the extraction rate of the resource.
 
 ```{r}
 run_sim(adaptive_capacity, 200, a2 = 1.5, S = 0.2, tau2 = 25, b2 = -.5) |>
@@ -295,3 +281,4 @@ run_sim(adaptive_capacity, 200, a2 = 1.5, S = 0.2, tau2 = 25, b2 = -.5, tidy = F
   theme_bw()
 ```
 
+# References
