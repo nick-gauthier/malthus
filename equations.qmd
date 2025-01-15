@@ -15,6 +15,8 @@ Deterministic logistic
 # install.packages("drat") # -- if you don't have drat installed
 drat:::add("mrc-ide")
 install.packages("odin")
+remotes::install_github("mrc-ide/odin")
+
 ```
 
 ```{r}
@@ -474,7 +476,7 @@ logistic_age <- odin::odin({
 
 ```{r}
 #| echo: FALSE
-  log_stoch_model <- logistic_age$new(k = 1000)
+  log_stoch_model <- logistic_age$new(K = 1000)
     result_stoch <- log_stoch_model$run(0:1000, replicate = 1)
     result_stoch <- log_stoch_model$transform_variables(result_stoch)
     result_stoch <- cbind.data.frame(t = result_stoch[[1]], result_stoch[-1]) |>
@@ -508,4 +510,228 @@ mortality_table
 
 ```{r}
 mean(c(.381, .063, .063, .063, .063))
+```
+```{r}
+logistic_age_food_full <- odin::odin({
+  config(include) <- "pgamma.cpp"
+  n_age <- user(120) 
+  # Initial conditions
+  initial(N[]) <- N0[i]
+
+  # Parameters
+  Y <- user(13100) # yield, kcal/ha/day
+  Y_var <- user(0.3) # Yield variation as fraction of base yield
+  phi[] <- user() # Age-specific work capacity (0-1)
+  rho[] <- user() # Age-specific food needs (min rations)
+  delta_base[] <- user()
+  dim(delta_base) <- n_age
+  fertility[] <- user()
+  dim(fertility) <- n_age
+    
+  # Calculate total workers and consumers
+  workers[] <- N[i] * phi[i]
+  dim(workers) <- n_age
+  N_workers <- sum(workers)
+  J <- user(2785) # max kcal/day required by neediest age
+  consumption_by_age[] <- N[i] * J * rho[i]
+  dim(consumption_by_age) <- n_age
+  consumption <- sum(consumption_by_age)
+
+  # Food production with random variation and land limitation
+  A_max <- user(1000) # Maximum arable land
+  H <- user(5) # number of hours most productive age class devotes to ag per day OR ha-days/hour/year
+  K <- user(0.0944) # workers hours to area cultivated, ha/worker-hour, or is it the area wokred in H hours?
+  # H * K should be ha/person/day
+  F_cultivated <- 1 - exp(-K * H * N_workers / A_max) # should divide N by 2 if sex specific labor?
+    Y_random <- rgamma(1 / (Y_var^2), Y * (Y_var^2))
+  production <- Y_random * A_max * F_cultivated # Total food production 
+
+  # Food ratio (available/needed)
+  E <- production / consumption 
+  #initial(E_out) <- 1
+  # Vital rates responsive to food ratio
+  fertility_actual[] <- fertility[i] * pgamma_cpp(E, 4.579627264, 0.1)
+  delta[] <- 1 - (delta_base[i] * pgamma_cpp(E, survivor_shape[i], 0.1)) # convert survival to mortality prob
+  
+  # Update food stores
+ # update(F) <- max(0, F + P - food_need)
+
+  # Population dynamics
+  b_by_age[] <- rbinom(N[i], fertility_actual[i]) # Births from adults # add dt
+  b <- sum(b_by_age)
+  dim(b_by_age) <- n_age
+  d[] <- rbinom(N[i], delta[i]) # Deaths
+  N_after_death[] <- N[i] - d[i]
+
+  # Aging transitions
+  update(N[1]) <- b
+  update(N[2:n_age]) <- N_after_death[i - 1]
+  #update(E_out) <- E
+
+  # Dimensions
+  dim(N) <- n_age
+  dim(delta) <- n_age 
+  dim(phi) <- n_age
+  dim(rho) <- n_age
+  N0[] <- user()
+  dim(N0) <- n_age
+  dim(fertility_actual) <- n_age
+  dim(d) <- n_age
+  survivor_shape[] <- user()
+  dim(survivor_shape) <- n_age
+  dim(N_after_death) <- n_age
+}, verbose = FALSE)
+```
+
+```{r}
+logistic_age_food_full <- odin.dust::odin_dust({
+  # Include external C++ function
+  config(include) <- "pgamma.cpp"
+  
+  # Model dimensions
+  n_age <- user(120)
+  
+  # Initial conditions
+  initial(pop[]) <- pop_init[i]
+  
+  # Production parameters
+  yield_base <- user(13100)      # Base yield (kcal/ha/day)
+  yield_var <- user(0.3)         # Yield variation as fraction of base yield
+  land_max <- user(1000)         # Maximum arable land
+  work_hours <- user(5)          # Hours devoted to agriculture per day
+  land_per_hour <- user(0.0944)  # Area cultivated per worker-hour (ha/worker-hour)
+  cal_max <- user(2785)          # Maximum daily caloric requirement
+  
+  # Age-specific parameters
+  work_capacity[] <- user()      # Age-specific work capacity (0-1)
+  food_need[] <- user()          # Age-specific relative food needs
+  surv_base[] <- user()          # Base survival rates
+  fert_base[] <- user()          # Base fertility rates
+  pop_init[] <- user()           # Initial population distribution
+  surv_shape[] <- user()         # Survival shape parameters
+  
+  # Set dimensions for age-specific vectors
+  dim(work_capacity) <- n_age
+  dim(food_need) <- n_age
+  dim(surv_base) <- n_age
+  dim(fert_base) <- n_age
+  dim(pop_init) <- n_age
+  dim(surv_shape) <- n_age
+  
+  # Calculate workforce and consumption
+  workers[] <- pop[i] * work_capacity[i]
+  dim(workers) <- n_age
+  total_workers <- sum(workers)
+  
+  cal_need[] <- pop[i] * cal_max * food_need[i]
+  dim(cal_need) <- n_age
+  total_cal_need <- sum(cal_need)
+  
+  # Food production with stochastic variation and land limitation
+  land_used <- 1 - exp(-land_per_hour * work_hours * total_workers / land_max)
+  yield_actual <- rgamma(1 / (yield_var^2), yield_base * (yield_var^2))
+  food_prod <- yield_actual * land_max * land_used
+  
+  # Food availability ratio
+  food_ratio <- food_prod / total_cal_need
+  
+  # Vital rates responsive to food ratio
+  fert_actual[] <- fert_base[i] * pgamma_cpp(food_ratio, 4.579627264, 0.1)
+  mort_rate[] <- 1 - (surv_base[i] * pgamma_cpp(food_ratio, surv_shape[i], 0.1))
+  
+  # Population dynamics
+  births_by_age[] <- rbinom(pop[i], fert_actual[i])
+  total_births <- sum(births_by_age)
+  deaths[] <- rbinom(pop[i], mort_rate[i])
+  pop_surviving[] <- pop[i] - deaths[i]
+  
+  # Set dimensions for dynamic variables
+  dim(births_by_age) <- n_age
+  dim(mort_rate) <- n_age
+  dim(fert_actual) <- n_age
+  dim(deaths) <- n_age
+  dim(pop_surviving) <- n_age
+  dim(pop) <- n_age
+  
+  # Update equations
+  update(pop[1]) <- total_births
+  update(pop[2:n_age]) <- pop_surviving[i - 1]
+  
+}, verbose = FALSE)
+```
+
+```{r}
+# Create initial age distribution vector
+
+
+
+# Update the code to run the model
+log_food_model <- logistic_age_food_full$new(
+  pop_init = initial_N,
+  fert_base = pars$mstar,
+  surv_shape = pars$mortparms,
+  surv_base = pars$pstar,
+  work_capacity = pars$phi,
+  food_need = pars$rho,
+  n_age = 120,
+  yield_var = 0.1
+)
+
+# Rest of your code remains the same
+result_stoch <- log_food_model$run(0:500, replicate = 1)
+result_stoch <- log_food_model$transform_variables(result_stoch)
+result_stoch <- cbind.data.frame(t = result_stoch[[1]], N = rowSums(result_stoch[-1]$pop)) #|>
+ # pivot_longer(-t)
+ggplot() +
+  geom_line(data = result_stoch, aes(x = t, y = N)) +
+  labs(title = "Logistic Growth Simulation",
+       x = "Time",
+       y = "Population Size",
+       color = "Age Class") +
+  theme_bw()
+```
+
+```{r}
+library(tidyverse)
+n_particles <- 10
+years <- 1000
+pars <- read_csv('../../Models/spacelim-master/demog_vectors.csv') |>
+  mutate(age = 0:119)
+n_age <- 120
+par_list <- list(
+  pop_init = c(rep(0,20), 10, rep(0, 99)),
+  fert_base = pars$mstar,
+  surv_shape = pars$mortparms,
+  surv_base = pars$pstar,
+  work_capacity = pars$phi,
+  food_need = pars$rho,
+  n_age = 120,
+  yield_var = 0.3)
+
+mod <- logistic_age_food_full$new(pars = par_list,
+                                      time = 1L,
+    n_particles = n_particles,
+    seed = 6L
+    )
+
+
+state <- mod$simulate(1:years) |> 
+  array(dim = c(n_age, n_particles, years), 
+        dimnames = list(age = 1:n_age,  # might not be exactly correct
+                        rep = 1:n_particles, 
+                        time = 1:years)) |>
+  cubelyr::as.tbl_cube(met_name = 'value') |>  
+  as_tibble()
+
+state |> 
+  group_by(rep, time) |>
+  summarize(N = sum(value)) |>
+ggplot(aes(time, N, group = rep)) +
+  geom_line(alpha = .3) +
+  labs(
+    title = "Stochastic Population Simulation",
+    x = "Time (years)",
+    y = "Population"
+  ) +
+  theme_bw()
 ```
