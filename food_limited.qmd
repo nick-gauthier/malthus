@@ -1,0 +1,594 @@
+---
+title: "Food-Limited Population Model"
+format: html
+editor: visual
+---
+
+```{r setup, include=FALSE}
+library(tidyverse)
+```
+
+## 1. Model Definition
+
+This model simulates a population with age structure under food production constraints.
+
+```{r}
+food_limited <- odin.dust::odin_dust({
+  # Include external C++ function
+  config(include) <- "pgamma.cpp"
+  
+  dt <- user(1)
+  
+  # Model dimensions
+  n_age <- user(120)
+  
+  # Initial conditions
+  initial(pop[]) <- pop_init[i]
+  
+  # Production parameters
+  yield_base <- user(13100 * 365)      # Base yield (kcal/ha/year)
+  land_max <- user(1000)         # Maximum arable land
+  work_hours <- user(5)          # Hours devoted to agriculture per day
+  land_per_hour <- user(0.0944)  # Area cultivated per worker-hour (ha/worker-hour)
+  cal_max <- user(2785 * 365)          # Maximum yearly caloric requirement
+  set_aside <- user(0)         # Yield proportion set aside 
+  alpha <- user(0.12)  # annual decay rate of food in storage
+  
+  # Age-specific parameters
+  work_capacity[] <- user()      # Age-specific work capacity (0-1)
+  food_need[] <- user()          # Age-specific relative food needs
+  surv_base[] <- user()          # Base survival rates
+  fert_base[] <- user()          # Base fertility rates
+  pop_init[] <- user()           # Initial population distribution
+  surv_shape[] <- user()         # Survival shape parameters
+  
+  # Set dimensions for age-specific vectors
+  dim(work_capacity) <- n_age
+  dim(food_need) <- n_age
+  dim(surv_base) <- n_age
+  dim(fert_base) <- n_age
+  dim(pop_init) <- n_age
+  dim(surv_shape) <- n_age
+  
+  # Calculate workforce and consumption
+  workers[] <- pop[i] * work_capacity[i]
+  dim(workers) <- n_age
+  total_workers <- sum(workers)
+  
+  cal_need[] <- pop[i] * cal_max * food_need[i]
+  dim(cal_need) <- n_age
+  total_cal_need <- sum(cal_need) * dt # scale to time step
+  
+  # Yield variation as fraction of base yield
+  yield_var[] <- user() 
+  dim(yield_var) <- user()
+  yield_actual <- yield_base * if (as.integer(step) >= length(yield_var)) yield_var[length(yield_var)] else yield_var[step + 1]
+  
+  # Food production with stochastic variation and land limitation
+  land_used <- 1 - exp(-land_per_hour * work_hours * total_workers / land_max)
+  #yield_actual <- rgamma(1 / (yield_var^2), yield_base * (yield_var^2))
+  food_prod <- yield_actual * land_max * land_used * (1 - set_aside) * dt # scale to time step
+  
+  # Food availability ratio
+  food_ratio <- (food_prod) / total_cal_need
+  #surplus <- food_prod - total_cal_need
+  
+  # Vital rates responsive to food ratio
+  fert_actual[] <- fert_base[i] * pgamma_cpp(food_ratio, 4.579627264, 0.1)
+  mort_rate[] <- 1 - (surv_base[i] * pgamma_cpp(food_ratio, surv_shape[i], 0.1))
+  
+  # Population dynamics
+  births_by_age[] <- rbinom(pop[i], 1 - (1 - fert_actual[i])^dt)
+  total_births <- sum(births_by_age)
+  deaths[] <- rbinom(pop[i], 1 - (1 - mort_rate[i])^dt) # sub-step scaling of probabilities
+  pop_surviving[] <- pop[i] - deaths[i]
+  
+  # Aging
+  aging_up[] <- rbinom(pop_surviving[i], dt)
+  dim(aging_up) <- n_age
+  
+  # Set dimensions for dynamic variables
+  dim(births_by_age) <- n_age
+  dim(mort_rate) <- n_age
+  dim(fert_actual) <- n_age
+  dim(deaths) <- n_age
+  dim(pop_surviving) <- n_age
+  dim(pop) <- n_age
+  
+  # Update equations -- double check this is correct!
+  update(pop[1]) <- pop_surviving[1] - aging_up[1] + total_births
+  update(pop[2:(n_age-1)]) <- (pop_surviving[i] - aging_up[i]) + aging_up[i-1]
+  update(pop[n_age]) <- pop_surviving[n_age] + aging_up[n_age - 1]
+  
+  update(food_stored) <- food_stored + food_prod - total_cal_need - alpha * food_stored * dt
+  update(food_ratio_out) <- food_ratio
+  #update(surplus_out) <- surplus
+  update(delta_N) <- total_births - sum(deaths)
+  initial(food_stored) <- 0
+ # initial(surplus_out) <- 0
+  initial(delta_N) <- 0
+  initial(food_ratio_out) <- 1
+  
+}, verbose = FALSE)
+```
+
+## 2. Yield Forcing Functions
+
+Functions to generate and interpolate yield variation over time.
+
+```{r yield_forcing}
+# Generate n years of yield multipliers
+generate_yield_forcing <- function(n_years, yield_var = 0.3, seed = NULL) {
+  if (!is.null(seed)) set.seed(seed)
+  
+  rgamma(n_years,
+         shape = 1 / (yield_var^2),
+         scale = 1 * (yield_var^2))  # Using 1 as base to get multipliers
+}
+
+# Interpolate annual yield values to finer time steps
+interpolate_yield_forcing <- function(annual_forcing, time_step = "monthly") {
+  n_years <- length(annual_forcing)
+  
+  # Create time vectors
+  annual_times <- 1:n_years
+  
+  periods_per_year <- switch(time_step,
+                           "monthly" = 12,
+                           "weekly" = 52,
+                           "daily" = 365)
+  
+  fine_times <- seq(1, n_years, length.out = n_years * periods_per_year)
+  
+  # Interpolation using splines
+  spline(annual_times, annual_forcing, n = length(fine_times))$y
+}
+```
+
+## 3. Simulation Setup
+
+Configure and run the simulation.
+
+```{r simulation_setup}
+# Simulation parameters
+n_particles <- 50
+dt <- 1
+years <- 600
+timesteps <- 1:(dt ^ -1 * years)
+
+# Generate yield forcing
+annual_forcing <- generate_yield_forcing(years, seed = 123)
+
+# Load demographic parameters
+pars <- read_csv('../../Models/spacelim-master/demog_vectors.csv') %>%
+  mutate(age = 0:119)
+
+n_age <- 120
+
+# Define work capacity by age (manually defined vector)
+work_capacity_vector <- c(
+  rep(0, 6),                                # Ages 0-5: No work
+  seq(0.1, 0.15, length.out = 4),           # Ages 6-9: Limited work
+  seq(0.2, 0.3, length.out = 3),            # Ages 10-12: More capacity
+  seq(0.4, 0.5, length.out = 2),            # Ages 13-14: Adolescent work
+  rep(1, 41),                               # Ages 15-55: Full capacity
+  seq(0.8, 0.6, length.out = 10),           # Ages 56-65: Declining capacity
+  seq(0.4, 0.3, length.out = 5),            # Ages 66-70: Elderly work
+  seq(0.2, 0, length.out = 15),             # Ages 71-85: Minimal to no work
+  rep(0, 34)                                # Ages 86+: No work
+)
+
+# Parameter list for model
+par_list <- list(
+  pop_init = c(rep(0, 20), 20, rep(0, 99)),  # Start with 20 people at age 20
+  fert_base = pars$mstar,                    # Base fertility rates
+  surv_shape = pars$mortparms,               # Survival shape parameters
+  surv_base = pars$pstar,                    # Base survival rates
+  work_capacity = work_capacity_vector,      # Age-specific work capacity
+  food_need = pars$rho,                      # Age-specific food needs
+  area_max = 2500, #6500,                           # Maximum area (65km² with 5km hex sides)
+  n_age = 120,
+  yield_base = 7000000,#7000 * 365,                   # Base yield (kcal/ha/year)
+  work_hours = 1, #8,                            # Daily work hours
+  land_per_hour = 1, #2.3,                       # Area cultivated per worker-hour
+  yield_var = annual_forcing,                # Annual yield variation
+  dt = dt,                                   # Time step
+  set_aside = 0                              # No food set aside
+)
+
+# Initialize and run model
+mod <- food_limited$new(
+  pars = par_list,
+  time = 1L,
+  n_particles = n_particles,
+  seed = 6L
+)
+
+# Run simulation
+state <- mod$simulate(timesteps) %>%
+  array(
+    dim = c(n_age + 3, n_particles, length(timesteps)),
+    dimnames = list(
+      age = c('food_stored', 'delta_N', 'e', 0:(n_age - 1)),
+      rep = 1:n_particles,
+      time = timesteps * dt
+    )
+  ) %>%
+  cubelyr::as.tbl_cube(met_name = 'value') %>%
+  as_tibble()
+```
+
+## 4. Visualizations
+
+### 4.1 Total Population Over Time
+
+```{r population_over_time}
+state %>%
+  filter(!(age %in% c('food_stored', 'e', 'surplus', 'delta_N'))) %>%
+  group_by(rep, time) %>%
+  summarize(N = sum(value)) %>%
+  ggplot(aes(time, N / par_list$area_max , group = rep)) +  #/ 6500
+  geom_line(alpha = 0.1) +
+  labs(
+    title = "Population Density Over Time",
+    x = "Time (years)",
+    y = "Population density (persons/ha)"
+  ) +
+  theme_bw()
+```
+
+```{r}
+ggsave('pop_trajectory.png', width = 6, height = 4, bg = 'white')
+```
+
+### 4.2 Population by Age Group
+
+```{r population_by_age_group}
+state %>%
+  filter(!(age %in% c('food_stored', 'e', 'surplus', 'delta_N'))) %>%
+  mutate(age_group = cut(
+    as.numeric(age),
+    breaks = c(0, 4, 14, 64, Inf),
+    labels = c("0-4", "5-14", "15-64", "65+"),
+    right = FALSE  # Makes intervals [0,5), [5,15), etc.
+  )) %>%
+  group_by(rep, time, age_group) %>%
+  summarize(N = sum(value), .groups = 'drop') %>%
+  ggplot(aes(time, N / par_list$area_max, group = interaction(rep, age_group), color = age_group)) +
+  geom_line(alpha = 0.1) +
+  labs(
+    title = "Population by Age Group",
+    x = "Time (years)",
+    y = "Population density (persons/ha)",
+    color = "Age Group"
+  ) +
+  theme_bw()
+```
+
+```{r}
+ggsave('pop_trajectory_ages.png', width = 6, height = 4, bg = 'white')
+```
+
+### 4.3 Food Storage
+
+```{r food_storage}
+state %>%
+  filter(age == 'food_stored') %>%
+  ggplot(aes(time, value / (2785 * 365))) +
+  geom_line(alpha = 0.1, aes( group = rep)) +
+  labs(
+    title = "Food Storage Over Time",
+    x = "Time (years)",
+    y = "Years of food stored (person rations)"
+  ) +
+  geom_smooth(color = 'blue') +
+  geom_hline(yintercept = 0, linetype = 2, color = 'red') +
+  theme_bw()
+```
+
+```{r}
+ggsave('food_storage.png', width = 6, height = 4, bg = 'white')
+```
+
+```{r age_structure}
+state %>%
+  filter(!(age %in% c('food_stored', 'e', 'surplus', 'delta_N'))) %>%
+  filter(time %in% seq(1, 600, 50)) %>%
+  mutate(age = as.numeric(age)) %>%
+  filter(age <= 99) %>%
+  filter(rep == 1) %>%
+  # Create 5-year age groups
+  mutate(age_group = 5 * floor(age/5)) %>%
+  # Sum values within each age group
+  group_by(time, age_group) %>%
+  summarize(value = sum(value), .groups = 'drop') %>%
+  ggplot(aes(age_group, value)) +
+  geom_col() +
+  facet_wrap(~time, scales = 'free_y') +
+  labs(
+    title = "Age Structure at Over Time",
+    x = "Age Group (5-year intervals)",
+    y = "Population"
+  ) +
+  theme_bw()
+```
+
+```{r}
+ggsave('age_pyramids.png', width = 6, height = 4, bg = 'white')
+```
+
+### 4.5 Dependency Ratio
+
+```{r dependency_ratio}
+state %>%
+  filter(!(age %in% c('food_stored', 'e', 'surplus', 'delta_N'))) %>%
+  mutate(workers = between(as.numeric(age), 15, 65)) %>%
+  group_by(rep, time, workers) %>%
+  summarize(value = sum(value), .groups = 'drop') %>%
+  pivot_wider(names_from = workers) %>%
+  mutate(dependency_ratio = `FALSE` / `TRUE`) %>%
+  ggplot(aes(time, dependency_ratio, group = rep)) +
+  geom_line(alpha = 0.1) +
+  labs(
+    title = "Dependency Ratio Over Time",
+    x = "Time (years)",
+    y = "Dependency Ratio (non-workers / workers)"
+  ) +
+  theme_bw()
+```
+
+```{r}
+ggsave('dependency_ratio.png', width = 6, height = 4, bg = 'white')
+```
+
+### Juvenility Index
+
+```{r}
+state %>%
+  filter(!(age %in% c('food_stored', 'e', 'surplus', 'delta_N'))) %>%
+  mutate(age_group = cut(
+    as.numeric(age),
+    breaks = c(0, 4, 14, 19, Inf),
+    labels = c("infants", "juveniles", "teens", "adults"),
+    right = FALSE  # Makes intervals [0,5), [5,15), etc.
+  )) %>%
+  group_by(rep, time, age_group) %>%
+  summarize(N = sum(value), .groups = 'drop') %>%
+  pivot_wider(names_from = age_group, values_from = N) |>
+  mutate(ji = juveniles / adults) |>
+  ggplot(aes(time, ji, group = rep)) +
+  geom_line(alpha = 0.1) +
+  labs(
+    title = "Juvenility Index Over Time",
+    x = "Time (years)",
+    y = "Juvenility Index (juveniles / adults)"
+  ) +
+  theme_bw()
+```
+
+```{r}
+ggsave('juvenility_index.png', width = 6, height = 4, bg = 'white')
+```
+
+### 4.6 Food Ratio
+
+```{r food_ratio}
+state %>%
+  filter(age == 'e') %>%
+  filter(time > 1) %>%
+  ggplot(aes(time, value)) +
+  geom_line(aes(group = rep), alpha = 0.1) +
+  geom_smooth() +
+  geom_hline(yintercept = 1, color = 'red', linetype = 2) +
+  labs(
+    title = "Food Ratio Over Time",
+    x = "Time (years)",
+    y = "Food Ratio (production/needs)",
+    caption = "Red line indicates ratio = 1"
+  ) +
+  theme_bw()
+```
+
+```{r}
+ggsave('food_ratio.png', width = 6, height = 4, bg = 'white')
+```
+
+### 4.7 Food Ratio Distribution
+
+```{r food_ratio_distribution}
+state %>%
+  filter(age == 'e') %>%
+  filter(time > 400) %>%
+  ggplot(aes(value)) +
+  geom_histogram(bins = 30) +
+  labs(
+    title = "Distribution of Food Ratio (Years 400-600)",
+    x = "Food Ratio",
+    y = "Count"
+  ) +
+  theme_bw()
+```
+
+```{r}
+ggsave('food_ratio_equilibrium.png', width = 6, height = 4, bg = 'white')
+```
+
+### 4.8 Transition Times
+
+```{r transition_times}
+# First transition to food ratio < 1
+state %>%
+  filter(age == 'e') %>%
+  filter(value < 1) %>%
+  group_by(rep) %>%
+  filter(time == min(time)) %>%
+  ungroup() %>%
+  ggplot(aes(time)) +
+  geom_histogram(bins = 20, fill = "steelblue") +
+  labs(
+    title = "First Transition to Food Ratio < 1",
+    x = "Time (years)",
+    y = "Count"
+  ) +
+  theme_bw()
+
+# First transition to food ratio ≤ 0.67 (more severe shortage)
+state %>%
+  filter(age == 'e') %>%
+  filter(value <= 0.67) %>%
+  group_by(rep) %>%
+  filter(time == min(time)) %>%
+  ungroup() %>%
+  ggplot(aes(time)) +
+  geom_histogram(bins = 20, fill = "darkred") +
+  labs(
+    title = "First Transition to Food Ratio ≤ 0.67",
+    x = "Time (years)",
+    y = "Count"
+  ) +
+  theme_bw()
+```
+
+### 4.9 Population Growth Rate
+
+```{r population_growth}
+state %>%
+  filter(age == 'delta_N') %>%
+  filter(time > 1) %>%
+  ggplot(aes(time, value)) +
+  geom_line(aes(group = rep), alpha = 0.1) +
+  geom_hline(yintercept = 0, color = 'red', linetype = 2) +
+  geom_smooth() +
+  labs(
+    title = "Population Growth Over Time",
+    x = "Time (years)",
+    y = "Population Change (persons per year)",
+    caption = "Red line indicates zero growth"
+  ) +
+  theme_bw()
+```
+
+```{r}
+ggsave('growth_rates.png', width = 6, height = 4, bg = 'white')
+```
+
+### 4.10 Combined Key Metrics
+
+```{r combined_metrics, fig.width = 7, fig.asp = 1}
+# Create food ratio plot
+food_ratio_plot <- state %>%
+  filter(age == 'e') %>%
+  ggplot(aes(time, value)) +
+  geom_line(alpha = 0.1, aes(group = rep)) +
+  geom_smooth(color = "blue") +
+  geom_hline(aes(yintercept = 1), color = 'red', linetype = 2) +
+  theme_bw() +
+  labs(
+    title = "Food Availability",
+    y = 'Food Ratio'
+  )
+
+# Create population plot
+pop_plot <- state %>%
+  filter(!(age %in% c('food_stored', 'e', 'surplus', 'delta_N'))) %>%
+  group_by(rep, time) %>%
+  summarize(N = sum(value), .groups = 'drop') %>%
+  ggplot(aes(time, N)) +
+  geom_line(alpha = 0.1, aes(group = rep)) +
+  geom_smooth(color = "green") +
+  theme_bw() +
+  labs(
+    title = "Total Population",
+    y = 'Persons'
+  )
+
+# Create growth rate plot
+growth_plot <- state %>%
+  filter(!(age %in% c('e', 'surplus', 'delta_N', 'food_stored'))) %>%
+  group_by(rep, time) %>%
+  summarize(N = sum(value)) %>%
+  mutate(growth_rate = (N - lag(N))) %>%
+  ungroup() |>
+  ggplot(aes(time, growth_rate)) +
+  geom_line(alpha = 0.1, aes(group = rep)) +
+  geom_smooth(color = "red") +
+  geom_hline(yintercept = 0, linetype = 2) +
+  theme_bw() +
+  labs(
+    title = "Population Growth",
+    y = 'Persons/year'
+  )
+
+storage_plot <- state %>%
+  filter(age == 'food_stored') %>%
+  ggplot(aes(time, value / (2785 * 365))) +
+  geom_line(alpha = 0.1, aes( group = rep)) +
+  labs(
+    title = "Food Surplus",
+    x = "Time (years)",
+    y = "Rations"
+  ) +
+   geom_line(alpha = 0.1, aes(group = rep)) +
+  geom_smooth(color = "purple") +
+  geom_hline(yintercept = 0, linetype = 2, color = 'red') +
+  theme_bw()
+
+# Combine plots
+library(patchwork)
+pop_plot / food_ratio_plot / growth_plot / storage_plot +
+  plot_layout(heights = c(1, 1, 1, 1)) +
+  plot_annotation(
+    title = "Key Population Dynamics Metrics",
+    caption = "Smoothed trends across all simulation runs"
+  )
+```
+
+```{r}
+ggsave('pop_dynamics_metrics.png', width = 7, height = 9, bg = 'white')
+```
+
+## 5. Elasticity Analysis
+
+```{r elasticity}
+# Survival elasticity by age and food ratio
+expand_grid(age = 0:100, e = seq(0, 1.2, 0.01)) %>%
+  left_join(pars) %>%
+  mutate(elasticity = pgamma(e, mortparms, scale = 0.1),
+         survival = pstar * elasticity) %>%
+  ggplot(aes(e, survival, group = age, color = age)) +
+  scale_color_viridis_c() +
+  geom_line() +
+  labs(
+    title = "Survival Rate by Age and Food Ratio",
+    x = "Food Ratio",
+    y = "Survival Rate",
+    color = "Age"
+  ) +
+  theme_bw()
+
+# Mortality elasticity
+expand_grid(age = 0:100, e = seq(0, 1.2, 0.01)) %>%
+  left_join(pars) %>%
+  mutate(elasticity = pgamma(e, mortparms, scale = 0.1),
+         survival = pstar * elasticity) %>%
+  ggplot(aes(e, 1 - survival, group = age, color = age)) +
+  scale_color_viridis_c() +
+  geom_line() +
+  labs(
+    title = "Mortality Rate by Age and Food Ratio",
+    x = "Food Ratio",
+    y = "Mortality Rate",
+    color = "Age"
+  ) +
+  theme_bw()
+```
+
+```{r}
+ggsave('mortality_elasticity.png', width = 6, height = 4, bg = 'white')
+```
+
+## 6. Notes and Future Improvements
+
+The model currently doesn't incorporate several potentially important factors: - Food storage dynamics (currently implemented simplistically) - Spoilage mechanisms beyond basic decay rate - Seed reserves for future planting - Taxation or tithing effects - Seasonal or periodic work patterns - Sex/gender divisions in labor - Land fallowing practices
+
+Target population range for this area based on historical estimates: 5,200 - 19,500 people.

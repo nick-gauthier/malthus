@@ -4,7 +4,7 @@
 \alias{run_sim}
 \title{Title}
 \usage{
-run_sim(model, nsim = 500, ..., tidy = TRUE)
+run_sim(model, nsim = 500, ..., forcing = NULL, tidy = TRUE)
 }
 \description{
 Title

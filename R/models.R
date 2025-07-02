@@ -12,4 +12,6 @@
 ##' @export janssen
 ##' @export janssen_stochastic
 ##' @export adaptive_capacity
+##' @export nefedov_forced
+##' @export adaptive_capacity_forced
 NULL

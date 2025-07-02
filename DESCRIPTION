@@ -10,8 +10,9 @@ License: MIT + file LICENSE
 Imports: 
     odin
 Encoding: UTF-8
+LinkingTo: cpp11, dust
 LazyData: true
-RoxygenNote: 7.3.1
+RoxygenNote: 7.3.2
 Suggests: 
     knitr,
     rmarkdown,

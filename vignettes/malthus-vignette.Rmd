@@ -54,7 +54,7 @@ run_sim(brander_taylor, 1440) |>
 
 ## Nefedov model of population-resource dynamics
 
-The Nefedov model of Malthusian dynamics in pre-Industrial societies [@Nefedov2013] has human population dynamics dependant on the amount of food in storage, leading to periodic oscillations that depends on intrinsic population growth rates and the number of households one farming family can support:
+The Nefedov model of Malthusian dynamics in pre-Industrial societies [@Nefedov2013] has human population dynamics dependent on the amount of food in storage, leading to periodic oscillations that depends on intrinsic population growth rates and the number of households one farming family can support:
 
 $$
 \begin{align*}
@@ -278,6 +278,38 @@ run_sim(adaptive_capacity, 200, a2 = 1.5, S = 0.2, tau2 = 25, b2 = -.5, tidy = F
   geom_path(aes(color = time)) +
   geom_point(aes(color = time)) +
   scale_color_viridis_c() +
+  theme_bw()
+```
+
+# Dynamic inputs
+
+```{r}
+# make a sin wave forcing for 1000 time steps
+
+run_sim(nefedov_forced, 5000, y = sin(1:5000/500)  + 1, tt = 1:5000) |>
+  ggplot(aes(time, value)) +
+  geom_line(linewidth = 1.2) +
+  facet_wrap(~var, scales = 'free_y', nrow = 2) +
+  theme_bw()
+
+run_sim(nefedov, 5000) |>
+  ggplot(aes(time, value)) +
+  geom_line(linewidth = 1.2) +
+  facet_wrap(~var, scales = 'free_y', nrow = 2) +
+  theme_bw()
+
+
+run_sim(adaptive_capacity, 1000, a2 = 1.5, S = 0.2, tau2 = 25, b2 = -.5) |>
+  ggplot(aes(time, value)) +
+  geom_line(linewidth = 1.2) +
+  facet_wrap(~var, scales = 'free_y', nrow = 2) +
+  theme_bw()
+
+plot(sin(1:1000/50)* 2  + 2)
+run_sim(adaptive_capacity_forced, 1000, a2 = 1.5, S = 0.2, tau2 = 25, b2 = -.5, y = sin(1:1000/50)*2  + 2, tt = 1:1000) |>
+  ggplot(aes(time, value)) +
+  geom_line(linewidth = 1.2) +
+  facet_wrap(~var, scales = 'free_y', nrow = 2) +
   theme_bw()
 ```
 
