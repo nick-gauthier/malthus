@@ -13,20 +13,20 @@ initial(P) <- P0
 initial(E) <- E0
 initial(S) <- S0
 
-P0 <- user(1)
-E0 <- user(0.1)
-S0 <- user(0)
+P0 <- parameter(1)
+E0 <- parameter(0.1)
+S0 <- parameter(0)
 
 
-beta1 <- user(0.02)
-delta1 <- user(0.02)
-beta2 <- user(0.5)
-delta2 <- user(0.025)
-epsilon <- user(1)
-rho0 <- user(2) # max rate of food production per producer
-gamma <- user(10)
-a <- user(0.2) # Elite coercion ability, aka maximum size of area that can be controlled by oe exploiter
-c <- user(3)
-h <- user(1)
-alpha <- user(1)
-g0 <- user(1)
+beta1 <- parameter(0.02)
+delta1 <- parameter(0.02)
+beta2 <- parameter(0.5)
+delta2 <- parameter(0.025)
+epsilon <- parameter(1)
+rho0 <- parameter(2)
+gamma <- parameter(10)
+a <- parameter(0.2)
+c <- parameter(3)
+h <- parameter(1)
+alpha <- parameter(1)
+g0 <- parameter(1)

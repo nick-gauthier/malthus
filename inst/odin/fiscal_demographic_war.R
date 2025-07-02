@@ -11,16 +11,16 @@ initial(N) <- N0
 initial(S) <- S0
 initial(W) <- W0
 
-N0 <- user(1)
-S0 <- user(0)
-W0 <- user(0)
+N0 <- parameter(1)
+S0 <- parameter(0)
+W0 <- parameter(0)
 
-r <- user(0.015)    # growth rate [0-0.03]
-rho <-  user(1)
-beta <- user(0.25) # per capita state expenditure [0-1]
-delta <- user(0.1)
-kmax <- user(3)
-a <- user(0.01)
-b <- user(0.05)
-c <- user(1) # not in paper
-alpha <- user(0.1)
+r <- parameter(0.015)
+rho <- parameter(1)
+beta <- parameter(0.25)
+delta <- parameter(0.1)
+kmax <- parameter(3)
+a <- parameter(0.01)
+b <- parameter(0.05)
+c <- parameter(1)
+alpha <- parameter(0.1)

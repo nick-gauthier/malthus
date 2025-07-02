@@ -8,9 +8,11 @@ Description: More about what it does (maybe more than one line) Use four
     spaces when indenting paragraphs within the Description.
 License: MIT + file LICENSE
 Imports: 
-    odin
+    dust2,
+    monty
 Encoding: UTF-8
-LinkingTo: cpp11, dust
+Remotes: mrc-ide/dust2, mrc-ide/monty
+LinkingTo: cpp11, dust2, monty
 LazyData: true
 RoxygenNote: 7.3.2
 Suggests: 

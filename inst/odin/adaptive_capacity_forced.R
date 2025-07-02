@@ -21,25 +21,25 @@ output(fitness) <- r - (S * N / K) # actual per capita fitness
 # Create a vector of initial conditions
 initial(N) <- 0.01
 
-r <- user(0.25)  # growth rate [0-0.03] # 0.25 in the paper for generational time scale
-S <- user(0.5) # cost of social integration, 0 < S <= 1
-C <- interpolate(tt, y) # climate control on resources
+r <- parameter(0.25)
+S <- parameter(0.5)
+C <- interpolate(tt, y, 'linear') # climate control on resources
 
 # assume a1 < a2 and b1 > b2
-a1 <- user(0) # effect of human-made infrastructure on carrying capacity pre innovation
-a2 <- user(3) # effect of human-made infrastructure on carrying capacity post innovation
+a1 <- parameter(0)
+a2 <- parameter(3)
 
-b1 <- user(0) # effect of population density on resource productivity pre innovation
-b2 <- user(0) # effect of population density on resource productivity post innovation
+b1 <- parameter(0)
+b2 <- parameter(0)
 
-fmin <- user(0.1) # minimum fitness to induce innovation
-tau1 <- user(0) # time delay in perception of population pressure impacting fitness (generations)
-tau2 <- user(0) # time delay in population pressure impacting carrying capacity (generations)
+fmin <- parameter(0.1)
+tau1 <- parameter(0, constant = TRUE)
+tau2 <- parameter(0, constant = TRUE)
 
-alpha <- user(2) # exponent of population pressure on carrying capacity
+alpha <- parameter(2)
 
 # boilerplate interpolation functions
-tt[] <- user()
-y[] <- user()
-dim(tt) <- user()
+tt <- parameter()
+y <- parameter()
+dim(tt) <- parameter(rank = 1)
 dim(y) <- length(tt)

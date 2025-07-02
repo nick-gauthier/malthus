@@ -9,15 +9,15 @@ R_next <- R + g * R * (R / c) ^ gamma * (1 - R / c) - eta * P
 initial(P) <- P0
 initial(R) <- R0
 
-P0 <- user(10)
-R0 <- user(100)
+P0 <- parameter(10)
+R0 <- parameter(100)
 
-rb <- user(0.03)    # birth rate
-rd <- user(0.02)    # birth rate
-tau <- user(1) # rainfall
-gamma <- user(1) # degradation factor
-g <- user(0.0844) # regeneration rate of soil per year
-eta <- user(0.5) # annual depletion rate of resource per household
-a <- user(1)  # improvement factor
-c <- user(100) # carrying capacity
-alpha <- user(0.2) # production elasticity
+rb <- parameter(0.03)
+rd <- parameter(0.02)
+tau <- parameter(1)
+gamma <- parameter(1)
+g <- parameter(0.0844)
+eta <- parameter(0.5)
+a <- parameter(1)
+c <- parameter(100)
+alpha <- parameter(0.2)

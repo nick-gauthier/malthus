@@ -1,4 +1,6 @@
-odin::odin_package('.')
+odin2::odin_package('.')
+#odin.dust::odin_dust_package('.')
+dust::dust_package('.')
 devtools::document()
 path <- devtools::build(vignettes = TRUE)
 install.packages(path, repos = NULL, type = "source")

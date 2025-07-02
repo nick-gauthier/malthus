@@ -2,30 +2,28 @@
 # Include external C++ function
 config(include) <- "pgamma.cpp"
 
-dt <- user(1)
-
 # Model dimensions
-n_age <- user(120)
+n_age <- parameter(120)
 
 # Initial conditions
 initial(pop[]) <- pop_init[i]
 
 # Production parameters
-yield_base <- user(13100 * 365)      # Base yield (kcal/ha/year)
-land_max <- user(1000)         # Maximum arable land
-work_hours <- user(5)          # Hours devoted to agriculture per day
-land_per_hour <- user(0.0944)  # Area cultivated per worker-hour (ha/worker-hour)
-cal_max <- user(2785 * 365)          # Maximum yearly caloric requirement
-set_aside <- user(0)         # Yield proportion set aside
-alpha <- user(0.12)  # annual decay rate of food in storage
+yield_base <- parameter(13100 * 365)
+land_max <- parameter(1000)
+work_hours <- parameter(5)
+land_per_hour <- parameter(0.0944)
+cal_max <- parameter(2785 * 365)
+set_aside <- parameter(0)
+alpha <- parameter(0.12)
 
 # Age-specific parameters
-work_capacity[] <- user()      # Age-specific work capacity (0-1)
-food_need[] <- user()          # Age-specific relative food needs
-surv_base[] <- user()          # Base survival rates
-fert_base[] <- user()          # Base fertility rates
-pop_init[] <- user()           # Initial population distribution
-surv_shape[] <- user()         # Survival shape parameters
+work_capacity <- parameter()
+food_need <- parameter()
+surv_base <- parameter()
+fert_base <- parameter()
+pop_init <- parameter()
+surv_shape <- parameter()
 
 # Set dimensions for age-specific vectors
 dim(work_capacity) <- n_age
@@ -45,10 +43,10 @@ dim(cal_need) <- n_age
 total_cal_need <- sum(cal_need) * dt # scale to time step
 
 # Yield variation as fraction of base yield
-yield_var[] <- user()
-dim(yield_var) <- user()
-yield_actual <- yield_base * if (as.integer(step) >= length(yield_var)) yield_var[length(yield_var)] else yield_var[step + 1]
-
+yield_var <- parameter()
+dim(yield_var) <- parameter(rank = 1)
+yield_actual <- yield_base #* if (as.integer(step) >= length(yield_var)) yield_var[length(yield_var)] else yield_var[step + 1]
+# note big temp change above because need to adapt to step!!!
 # Food production with stochastic variation and land limitation
 land_used <- 1 - exp(-land_per_hour * work_hours * total_workers / land_max)
 #yield_actual <- rgamma(1 / (yield_var^2), yield_base * (yield_var^2))
@@ -63,13 +61,13 @@ fert_actual[] <- fert_base[i] * pgamma_cpp(food_ratio, 4.579627264, 0.1)
 mort_rate[] <- 1 - (surv_base[i] * pgamma_cpp(food_ratio, surv_shape[i], 0.1))
 
 # Population dynamics
-births_by_age[] <- rbinom(pop[i], 1 - (1 - fert_actual[i])^dt)
+births_by_age[] <- Binomial(pop[i], 1 - (1 - fert_actual[i])^dt)
 total_births <- sum(births_by_age)
-deaths[] <- rbinom(pop[i], 1 - (1 - mort_rate[i])^dt) # sub-step scaling of probabilities
+deaths[] <- Binomial(pop[i], 1 - (1 - mort_rate[i])^dt)
 pop_surviving[] <- pop[i] - deaths[i]
 
 # Aging
-aging_up[] <- rbinom(pop_surviving[i], dt)
+aging_up[] <- Binomial(pop_surviving[i], dt)
 dim(aging_up) <- n_age
 
 # Set dimensions for dynamic variables

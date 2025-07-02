@@ -7,7 +7,7 @@ s_deriv <- N * (1 - N / K) - beta * N
 initial(N) <- 0.5
 initial(S) <- 0.1
 
-r <- user(0.02)
-beta <- user(0.25)
-c <- user(3)
-s0 <- user(10)
+r <- parameter(0.02)
+beta <- parameter(0.25)
+c <- parameter(3)
+s0 <- parameter(10)

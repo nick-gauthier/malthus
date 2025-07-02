@@ -4,10 +4,10 @@ deriv(L) <- L * (phi * alpha * beta * S - sigma) # population (growth proportion
 initial(L) <- L_init
 initial(S) <- K
 
-L_init <- user(40)
-beta <- user(0.4) # resource preference, i.e share of labor force for food production/harvest
-alpha <- user(1e-6) # extraction efficiency, at default parameter "if S = K a household could provide its subsistence in about 20% available labor time"
-phi <- user(4) # procreation parameter, positive population growth if stock is about 50% of carrying capacity
-sigma <- user(0.01) # natural death rate - natural birth rate -- pop decreases by 10% per decade in absence of resources
-K <- user(12000) # environmental carrying capacity for resource
-r <- user(0.004) # 4% per decade
+L_init <- parameter(40)
+beta <- parameter(0.4)
+alpha <- parameter(1e-06)
+phi <- parameter(4)
+sigma <- parameter(0.01)
+K <- parameter(12000)
+r <- parameter(0.004)

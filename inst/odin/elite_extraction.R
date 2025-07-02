@@ -7,11 +7,11 @@ rho_e <- rho0 * epsilon * a * (1 - g * P) * P / (1 + a * E)
 initial(P) <- 100
 initial(E) <- 10
 
-beta1 <- user(0.02)
-delta1 <- user(0.02)
-beta2 <- user(0.5)
-delta2 <- user(0.025)
-epsilon <- user(0.1)
-rho0 <- user(2) # max rate of food production per producer
-g <- user(0.1) # per capita production decline with increasing numbers
-a <- user(0.1) # Elite coercion ability, aka maximum size of area that can be controlled by oe exploiter
+beta1 <- parameter(0.02)
+delta1 <- parameter(0.02)
+beta2 <- parameter(0.5)
+delta2 <- parameter(0.025)
+epsilon <- parameter(0.1)
+rho0 <- parameter(2)
+g <- parameter(0.1)
+a <- parameter(0.1)

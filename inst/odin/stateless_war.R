@@ -5,7 +5,7 @@ deriv(W) <- (a * N ^ 2 - b * W)
 initial(N) <- 0.5
 initial(W) <- 0
 
-r <- user(0.015)    # growth rate [0-0.03]
-K <- user(3)
-a <- user(0.01)
-b <- user(0.05)
+r <- parameter(0.015)
+K <- parameter(3)
+a <- parameter(0.01)
+b <- parameter(0.05)
